@@ -1,6 +1,6 @@
 export const auth0Config = {
-  domain: "dev-vsok4njdueqa22q1.us.auth0.com",
-  clientId: "mNYLi9yXfBgvaUwYBAeKa2Frsp6FsEHE",
+  domain: import.meta.env.VITE_AUTH0_DOMAIN,
+  clientId: import.meta.env.VITE_AUTH0_CLIENT_ID,
   authorizationParams: {
     redirect_uri: window.location.origin,
     scope: "openid profile email",
