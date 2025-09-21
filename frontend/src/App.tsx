@@ -99,7 +99,7 @@ function App() {
           onToggle={() => setSidebarOpen(!sidebarOpen)}
         />
         
-        <main className="flex-1 p-4 lg:p-8 min-w-0">
+        <main className="flex-1 p-2 lg:p-2 min-w-0 pt-20 lg:pt-4">
           <div className="max-w-7xl mx-auto">
             {renderCurrentPage()}
           </div>

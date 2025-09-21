@@ -32,13 +32,16 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Mobile menu button */}
-      <button
-        onClick={onToggle}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 glass-card"
-      >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+      {/* Mobile header with hamburger and title */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 bg-white/90 backdrop-blur-sm border-b border-gray-200 flex items-center px-4">
+        <button
+          onClick={onToggle}
+          className="p-2 glass-card mr-3"
+        >
+          {isOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+        <h1 className="text-xl font-bold text-gray-800">DocLess</h1>
+      </div>
 
       {/* Mobile backdrop */}
       {isOpen && (

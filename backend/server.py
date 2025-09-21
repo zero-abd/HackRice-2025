@@ -13,10 +13,11 @@ from dotenv import load_dotenv
 from llm.service import ConversationSummarizer
 from database.connection import connect_to_mongo, close_mongo_connection
 # Auth0 verification removed - frontend handles authentication
-from database.services import user_service, patient_service
+from database.services import user_service, patient_service, session_service
 from database.models import (
     UserCreate, UserUpdate, UserResponse, UserProfileResponse,
     PatientCreate, PatientUpdate, PatientResponse, PatientListResponse, PatientDetailResponse,
+    SessionCreate, SessionUpdate, SessionResponse, SessionListResponse, SessionDetailResponse,
     StandardResponse, ConversationCreate, ConversationResponse
 )
 
@@ -429,6 +430,204 @@ async def delete_patient(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete patient: {str(e)}"
+        )
+
+# ==================== SESSION MANAGEMENT ENDPOINTS ====================
+
+@app.post('/patients/{patient_id}/sessions', response_model=SessionDetailResponse)
+async def create_session(
+    patient_id: str,
+    session_data: SessionCreate,
+    user_email: str = Depends(get_user_email_from_header)
+):
+    """Create a new session for a patient"""
+    try:
+        # Get current user
+        user = await user_service.get_user_by_email(user_email)
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found. Please complete registration first."
+            )
+        
+        # Verify patient belongs to user
+        patient = await patient_service.get_patient_by_id(patient_id)
+        if not patient or str(patient.doctor_id) != str(user.id):
+            raise HTTPException(
+                status_code=404,
+                detail="Patient not found or access denied"
+            )
+        
+        # Set patient_id and doctor_id in session data
+        session_data.patient_id = patient_id
+        session_data.doctor_id = str(user.id)
+        
+        # Create session
+        session = await session_service.create_session(session_data)
+        session_response = session_service.session_to_response(session)
+        
+        return SessionDetailResponse(
+            success=True,
+            message="Session created successfully",
+            data=session_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating session: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create session: {str(e)}"
+        )
+
+@app.get('/patients/{patient_id}/sessions', response_model=SessionListResponse)
+async def get_patient_sessions(
+    patient_id: str,
+    user_email: str = Depends(get_user_email_from_header)
+):
+    """Get all sessions for a specific patient"""
+    try:
+        # Get current user
+        user = await user_service.get_user_by_email(user_email)
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found. Please complete registration first."
+            )
+        
+        # Verify patient belongs to user
+        patient = await patient_service.get_patient_by_id(patient_id)
+        if not patient or str(patient.doctor_id) != str(user.id):
+            raise HTTPException(
+                status_code=404,
+                detail="Patient not found or access denied"
+            )
+        
+        # Get sessions
+        sessions = await session_service.get_sessions_by_patient(patient_id)
+        session_responses = [session_service.session_to_response(session) for session in sessions]
+        
+        return SessionListResponse(
+            success=True,
+            message="Sessions retrieved successfully",
+            data=session_responses
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting patient sessions: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get sessions: {str(e)}"
+        )
+
+@app.get('/sessions/{session_id}', response_model=SessionDetailResponse)
+async def get_session(
+    session_id: str,
+    user_email: str = Depends(get_user_email_from_header)
+):
+    """Get a specific session by UUID"""
+    try:
+        # Get current user
+        user = await user_service.get_user_by_email(user_email)
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found. Please complete registration first."
+            )
+        
+        # Get session
+        session = await session_service.get_session_by_id(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found"
+            )
+        
+        # Verify user has access to this session
+        if str(session.doctor_id) != str(user.id):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied"
+            )
+        
+        session_response = session_service.session_to_response(session)
+        
+        return SessionDetailResponse(
+            success=True,
+            message="Session retrieved successfully",
+            data=session_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting session: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get session: {str(e)}"
+        )
+
+@app.put('/sessions/{session_id}', response_model=SessionDetailResponse)
+async def update_session(
+    session_id: str,
+    session_update: SessionUpdate,
+    user_email: str = Depends(get_user_email_from_header)
+):
+    """Update an existing session"""
+    try:
+        # Get current user
+        user = await user_service.get_user_by_email(user_email)
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found. Please complete registration first."
+            )
+        
+        # Get session
+        session = await session_service.get_session_by_id(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found"
+            )
+        
+        # Verify user has access to this session
+        if str(session.doctor_id) != str(user.id):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied"
+            )
+        
+        # Update session
+        updated_session = await session_service.update_session(session_id, session_update)
+        if not updated_session:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to update session"
+            )
+        
+        session_response = session_service.session_to_response(updated_session)
+        
+        return SessionDetailResponse(
+            success=True,
+            message="Session updated successfully",
+            data=session_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating session: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update session: {str(e)}"
         )
 
 # ==================== CONVERSATION HISTORY ENDPOINTS ====================

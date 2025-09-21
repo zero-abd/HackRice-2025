@@ -1,4 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react';
+import { useMemo } from 'react';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -76,6 +77,29 @@ export interface PatientCreateData {
   allergies?: string[];
   insurance_info?: Record<string, any>;
   notes?: string;
+}
+
+export interface Session {
+  id: string;
+  session_id: string;
+  patient_id: string;
+  doctor_id: string;
+  title: string;
+  transcript: string;
+  summary?: string;
+  date: string;
+  duration: number;
+  status: 'completed' | 'in_progress' | 'draft';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionCreateData {
+  title: string;
+  transcript: string;
+  summary?: string;
+  duration?: number;
+  status?: 'completed' | 'in_progress' | 'draft';
 }
 
 class ApiService {
@@ -166,6 +190,29 @@ class ApiService {
     });
   }
 
+  // Session management
+  async createSession(patientId: string, sessionData: SessionCreateData): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/patients/${patientId}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(sessionData),
+    });
+  }
+
+  async getPatientSessions(patientId: string): Promise<ApiResponse<Session[]>> {
+    return this.request<Session[]>(`/patients/${patientId}/sessions`);
+  }
+
+  async getSession(sessionId: string): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/sessions/${sessionId}`);
+  }
+
+  async updateSession(sessionId: string, sessionData: Partial<SessionCreateData>): Promise<ApiResponse<Session>> {
+    return this.request<Session>(`/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(sessionData),
+    });
+  }
+
   // Conversation management
   async getPatientConversations(patientId: string): Promise<ApiResponse<any[]>> {
     return this.request<any[]>(`/patients/${patientId}/conversations`);
@@ -193,11 +240,16 @@ export const apiService = new ApiService();
 export const useApiService = () => {
   const { user, isAuthenticated } = useAuth0();
 
+  // Set user email whenever the user is authenticated
+  if (isAuthenticated && user && user.email) {
+    apiService.setUserEmail(user.email);
+  }
+
   const createUserIfNeeded = async (): Promise<User | null> => {
     if (!isAuthenticated || !user || !user.email) return null;
 
     try {
-      // Set user email for API requests
+      // Ensure user email is set for API requests
       apiService.setUserEmail(user.email);
 
       // Try to get existing user profile first
@@ -229,10 +281,36 @@ export const useApiService = () => {
     return null;
   };
 
-  return {
-    ...apiService,
+  // Return a stable object to prevent unnecessary re-renders
+  return useMemo(() => ({
+    // User management
+    registerUser: apiService.registerUser.bind(apiService),
+    getUserProfile: apiService.getUserProfile.bind(apiService),
+    updateUserProfile: apiService.updateUserProfile.bind(apiService),
+    
+    // Patient management
+    createPatient: apiService.createPatient.bind(apiService),
+    getPatients: apiService.getPatients.bind(apiService),
+    getPatient: apiService.getPatient.bind(apiService),
+    updatePatient: apiService.updatePatient.bind(apiService),
+    deletePatient: apiService.deletePatient.bind(apiService),
+    
+    // Session management
+    createSession: apiService.createSession.bind(apiService),
+    getPatientSessions: apiService.getPatientSessions.bind(apiService),
+    getSession: apiService.getSession.bind(apiService),
+    updateSession: apiService.updateSession.bind(apiService),
+    
+    // Conversation management
+    getPatientConversations: apiService.getPatientConversations.bind(apiService),
+    summarizeConversation: apiService.summarizeConversation.bind(apiService),
+    
+    // Health check
+    healthCheck: apiService.healthCheck.bind(apiService),
+    
+    // Additional properties
     createUserIfNeeded,
     isAuthenticated,
     user,
-  };
+  }), [isAuthenticated, user, createUserIfNeeded]);
 };

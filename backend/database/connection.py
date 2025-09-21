@@ -47,3 +47,4 @@ def get_database():
 USERS_COLLECTION = "users"
 PATIENTS_COLLECTION = "patients"
 CONVERSATIONS_COLLECTION = "conversations"
+SESSIONS_COLLECTION = "sessions"

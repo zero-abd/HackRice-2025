@@ -4,10 +4,11 @@ from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 import logging
 
-from .connection import get_database, USERS_COLLECTION, PATIENTS_COLLECTION
+from .connection import get_database, USERS_COLLECTION, PATIENTS_COLLECTION, SESSIONS_COLLECTION
 from .models import (
     UserCreate, UserUpdate, UserInDB, UserResponse,
-    PatientCreate, PatientUpdate, PatientInDB, PatientResponse
+    PatientCreate, PatientUpdate, PatientInDB, PatientResponse,
+    SessionCreate, SessionUpdate, SessionInDB, SessionResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,9 @@ class UserService:
             if existing_user:
                 # User exists, return existing user - convert ObjectId to string
                 existing_user["_id"] = str(existing_user["_id"])
+                # Convert ObjectIds in patient_ids to strings
+                if "patient_ids" in existing_user and existing_user["patient_ids"]:
+                    existing_user["patient_ids"] = [str(pid) if isinstance(pid, ObjectId) else pid for pid in existing_user["patient_ids"]]
                 return UserInDB(**existing_user)
             
             # Create new user
@@ -64,6 +68,9 @@ class UserService:
             
             if user_doc:
                 user_doc["_id"] = str(user_doc["_id"])
+                # Convert ObjectIds in patient_ids to strings
+                if "patient_ids" in user_doc and user_doc["patient_ids"]:
+                    user_doc["patient_ids"] = [str(pid) if isinstance(pid, ObjectId) else pid for pid in user_doc["patient_ids"]]
                 return UserInDB(**user_doc)
             return None
             
@@ -79,6 +86,9 @@ class UserService:
             
             if user_doc:
                 user_doc["_id"] = str(user_doc["_id"])
+                # Convert ObjectIds in patient_ids to strings
+                if "patient_ids" in user_doc and user_doc["patient_ids"]:
+                    user_doc["patient_ids"] = [str(pid) if isinstance(pid, ObjectId) else pid for pid in user_doc["patient_ids"]]
                 return UserInDB(**user_doc)
             return None
             
@@ -163,6 +173,7 @@ class PatientService:
             
             patient_dict = patient_data.dict()
             patient_dict["doctor_id"] = ObjectId(doctor_id)
+            patient_dict["session_ids"] = []
             patient_dict["created_at"] = datetime.utcnow()
             patient_dict["updated_at"] = datetime.utcnow()
             patient_dict["is_active"] = True
@@ -297,11 +308,131 @@ class PatientService:
             insurance_info=patient.insurance_info,
             notes=patient.notes,
             doctor_id=str(patient.doctor_id),
+            session_ids=patient.session_ids,
             created_at=patient.created_at,
             updated_at=patient.updated_at,
             is_active=patient.is_active
         )
 
+class SessionService:
+    def __init__(self):
+        self.db = None
+    
+    def get_db(self):
+        if self.db is None:
+            self.db = get_database()
+        return self.db
+    
+    async def create_session(self, session_data: SessionCreate) -> SessionInDB:
+        """Create a new session"""
+        try:
+            db = self.get_db()
+            
+            session_dict = session_data.dict()
+            session_dict["patient_id"] = ObjectId(session_data.patient_id)
+            session_dict["doctor_id"] = ObjectId(session_data.doctor_id)
+            session_dict["created_at"] = datetime.utcnow()
+            session_dict["updated_at"] = datetime.utcnow()
+            
+            result = await db[SESSIONS_COLLECTION].insert_one(session_dict)
+            session_dict["_id"] = str(result.inserted_id)
+            session_dict["patient_id"] = str(session_data.patient_id)
+            session_dict["doctor_id"] = str(session_data.doctor_id)
+            
+            # Add session UUID to patient's session_ids list
+            await db[PATIENTS_COLLECTION].update_one(
+                {"_id": ObjectId(session_data.patient_id)},
+                {"$push": {"session_ids": session_data.session_id}}
+            )
+            
+            logger.info(f"Created new session for patient: {session_data.patient_id}")
+            return SessionInDB(**session_dict)
+            
+        except Exception as e:
+            logger.error(f"Error creating session: {e}")
+            raise e
+    
+    async def get_sessions_by_patient(self, patient_id: str) -> List[SessionInDB]:
+        """Get all sessions for a specific patient"""
+        try:
+            db = self.get_db()
+            
+            cursor = db[SESSIONS_COLLECTION].find({
+                "patient_id": ObjectId(patient_id)
+            }).sort("date", -1)  # Sort by date descending
+            
+            sessions = []
+            async for session_doc in cursor:
+                session_doc["_id"] = str(session_doc["_id"])
+                session_doc["patient_id"] = str(session_doc["patient_id"])
+                session_doc["doctor_id"] = str(session_doc["doctor_id"])
+                sessions.append(SessionInDB(**session_doc))
+            
+            return sessions
+            
+        except Exception as e:
+            logger.error(f"Error getting sessions for patient: {e}")
+            raise e
+    
+    async def get_session_by_id(self, session_id: str) -> Optional[SessionInDB]:
+        """Get a specific session by UUID"""
+        try:
+            db = self.get_db()
+            
+            session_doc = await db[SESSIONS_COLLECTION].find_one({
+                "session_id": session_id
+            })
+            
+            if session_doc:
+                session_doc["_id"] = str(session_doc["_id"])
+                session_doc["patient_id"] = str(session_doc["patient_id"])
+                session_doc["doctor_id"] = str(session_doc["doctor_id"])
+                return SessionInDB(**session_doc)
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting session by ID: {e}")
+            raise e
+    
+    async def update_session(self, session_id: str, session_data: SessionUpdate) -> Optional[SessionInDB]:
+        """Update an existing session"""
+        try:
+            db = self.get_db()
+            
+            update_dict = session_data.dict(exclude_unset=True)
+            update_dict["updated_at"] = datetime.utcnow()
+            
+            result = await db[SESSIONS_COLLECTION].update_one(
+                {"session_id": session_id},
+                {"$set": update_dict}
+            )
+            
+            if result.modified_count > 0:
+                return await self.get_session_by_id(session_id)
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error updating session: {e}")
+            raise e
+    
+    def session_to_response(self, session: SessionInDB) -> SessionResponse:
+        """Convert SessionInDB to SessionResponse"""
+        return SessionResponse(
+            id=str(session.id),
+            session_id=session.session_id,
+            patient_id=str(session.patient_id),
+            doctor_id=str(session.doctor_id),
+            title=session.title,
+            transcript=session.transcript,
+            summary=session.summary,
+            date=session.date,
+            duration=session.duration,
+            status=session.status,
+            created_at=session.created_at,
+            updated_at=session.updated_at
+        )
+
 # Initialize services
 user_service = UserService()
 patient_service = PatientService()
+session_service = SessionService()

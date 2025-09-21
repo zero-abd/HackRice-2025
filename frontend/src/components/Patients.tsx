@@ -1,13 +1,13 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Search, Filter, UserPlus, MoreVertical, X, Calendar, User, Edit, Trash2, Phone, MapPin, Shield, Pill, AlertTriangle, FileText, Accessibility, UserCheck } from "lucide-react";
 import PatientDashboard from "./PatientDashboard";
+import { useApiService, PatientCreateData, Patient as ApiPatient } from "../services/api";
 
 interface Patient {
   id: string;
   name: string;
   gender: "Male" | "Female" | "Other";
   dob: string;
-  age: number;
   address: string;
   phoneNumber: string;
   healthInsurance: string;
@@ -23,7 +23,6 @@ interface PatientFormData {
   name: string;
   gender: "Male" | "Female" | "Other";
   dob: string;
-  age: string;
   address: string;
   phoneNumber: string;
   healthInsurance: string;
@@ -37,56 +36,15 @@ interface PatientFormData {
 
 const Patients: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  const [patients, setPatients] = useState<Patient[]>([
-    {
-      id: "1",
-      name: "John Smith",
-      gender: "Male",
-      dob: "1979-03-15",
-      age: 45,
-      address: "123 Main St, Houston, TX 77001",
-      phoneNumber: "(713) 555-0123",
-      healthInsurance: "Blue Cross Blue Shield",
-      medications: "Lisinopril, Metformin",
-      allergies: "Penicillin",
-      reasonForVisit: "Regular checkup",
-      disabilities: "None",
-      emergencyContact: "Jane Smith",
-      emergencyPhone: "(713) 555-0124"
-    },
-    {
-      id: "2",
-      name: "Sarah Wilson",
-      gender: "Female",
-      dob: "1992-07-22",
-      age: 32,
-      address: "456 Oak Ave, Houston, TX 77002",
-      phoneNumber: "(713) 555-0125",
-      healthInsurance: "Aetna",
-      medications: "Insulin, Metformin",
-      allergies: "None",
-      reasonForVisit: "Diabetes follow-up",
-      disabilities: "None",
-      emergencyContact: "Mike Wilson",
-      emergencyPhone: "(713) 555-0126"
-    },
-    {
-      id: "3",
-      name: "Michael Davis",
-      gender: "Male",
-      dob: "1966-11-08",
-      age: 58,
-      address: "789 Pine St, Houston, TX 77003",
-      phoneNumber: "(713) 555-0127",
-      healthInsurance: "Medicare",
-      medications: "Atorvastatin, Carvedilol",
-      allergies: "Shellfish",
-      reasonForVisit: "Chest pain",
-      disabilities: "Mobility impairment",
-      emergencyContact: "Linda Davis",
-      emergencyPhone: "(713) 555-0128"
-    }
-  ]);
+  const apiService = useApiService();
+  const [patients, setPatients] = useState<Patient[]>([]);
+
+  // Helper function to safely convert gender string to union type
+  const convertGender = (gender: string): "Male" | "Female" | "Other" => {
+    return (gender === "Male" || gender === "Female" || gender === "Other") 
+      ? gender 
+      : "Other";
+  };
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -95,7 +53,6 @@ const Patients: React.FC = () => {
     name: "",
     gender: "Male",
     dob: "",
-    age: "",
     address: "",
     phoneNumber: "",
     healthInsurance: "",
@@ -108,98 +65,172 @@ const Patients: React.FC = () => {
   });
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Calculate age from date of birth
-  const calculateAge = (dob: string) => {
-    const today = new Date();
-    const birthDate = new Date(dob);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
+  // Load patients from API on component mount
+  useEffect(() => {
+    const loadPatients = async () => {
+      try {
+        const response = await apiService.getPatients();
+        if (response.success && response.data) {
+          // Convert API patients to local format
+          const convertedPatients: Patient[] = response.data.map((apiPatient: ApiPatient) => ({
+            id: apiPatient.id,
+            name: `${apiPatient.first_name} ${apiPatient.last_name}`,
+            gender: convertGender(apiPatient.gender),
+            dob: apiPatient.date_of_birth.split('T')[0], // Convert to YYYY-MM-DD format
+            address: apiPatient.address || "",
+            phoneNumber: apiPatient.phone_number || "",
+            healthInsurance: apiPatient.insurance_info?.provider || "",
+            medications: Array.isArray(apiPatient.current_medications) 
+              ? apiPatient.current_medications.join(", ") 
+              : apiPatient.current_medications || "",
+            allergies: Array.isArray(apiPatient.allergies) 
+              ? apiPatient.allergies.join(", ") 
+              : apiPatient.allergies || "",
+            reasonForVisit: apiPatient.notes || "",
+            disabilities: "", // Not in API model, default to empty
+            emergencyContact: apiPatient.emergency_contact_name || "",
+            emergencyPhone: apiPatient.emergency_contact_phone || ""
+          }));
+          setPatients(convertedPatients);
+        }
+      } catch (error) {
+        console.error('Failed to load patients:', error);
+        // Keep empty array as fallback
+      }
+    };
+
+    if (apiService.isAuthenticated) {
+      loadPatients();
     }
-    return age;
-  };
+  }, [apiService.isAuthenticated]); // Only depend on authentication status
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    const updatedFormData = { ...formData, [name]: value };
-    
-    // Auto-calculate age when DOB changes
-    if (name === 'dob' && value) {
-      updatedFormData.age = calculateAge(value).toString();
-    }
-    
-    setFormData(updatedFormData);
+    setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingPatient) {
-      // Update existing patient
-      const updatedPatient: Patient = {
-        ...editingPatient,
-        name: formData.name,
-        gender: formData.gender,
-        dob: formData.dob,
-        age: parseInt(formData.age),
-        address: formData.address,
-        phoneNumber: formData.phoneNumber,
-        healthInsurance: formData.healthInsurance,
-        medications: formData.medications,
-        allergies: formData.allergies,
-        reasonForVisit: formData.reasonForVisit,
-        disabilities: formData.disabilities,
-        emergencyContact: formData.emergencyContact,
-        emergencyPhone: formData.emergencyPhone
-      };
+    try {
+      if (editingPatient) {
+        // Update existing patient
+        const nameParts = formData.name.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'N/A';
+        
+        const updateData: Partial<PatientCreateData> = {
+          first_name: firstName,
+          last_name: lastName,
+          date_of_birth: formData.dob + 'T00:00:00.000Z', // Convert to ISO datetime format
+          gender: formData.gender,
+          phone_number: formData.phoneNumber || undefined,
+          address: formData.address || undefined,
+          emergency_contact_name: formData.emergencyContact || undefined,
+          emergency_contact_phone: formData.emergencyPhone || undefined,
+          current_medications: formData.medications ? formData.medications.split(',').map(m => m.trim()).filter(m => m) : [],
+          allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()).filter(a => a) : [],
+          insurance_info: formData.healthInsurance ? { provider: formData.healthInsurance } : {},
+          notes: formData.reasonForVisit || undefined
+        };
 
-      // Update patient in the list
-      setPatients(prev => prev.map(patient => 
-        patient.id === editingPatient.id ? updatedPatient : patient
-      ));
-    } else {
-      // Create new patient
-      const newId = (patients.length + 1).toString();
-      const newPatient: Patient = {
-        id: newId,
-        name: formData.name,
-        gender: formData.gender,
-        dob: formData.dob,
-        age: parseInt(formData.age),
-        address: formData.address,
-        phoneNumber: formData.phoneNumber,
-        healthInsurance: formData.healthInsurance,
-        medications: formData.medications,
-        allergies: formData.allergies,
-        reasonForVisit: formData.reasonForVisit,
-        disabilities: formData.disabilities,
-        emergencyContact: formData.emergencyContact,
-        emergencyPhone: formData.emergencyPhone
-      };
+        const response = await apiService.updatePatient(editingPatient.id, updateData);
+        
+        if (response.success && response.data) {
+          const updatedPatient: Patient = {
+            id: response.data.id,
+            name: `${response.data.first_name} ${response.data.last_name}`,
+            gender: convertGender(response.data.gender),
+            dob: response.data.date_of_birth.split('T')[0],
+            address: response.data.address || "",
+            phoneNumber: response.data.phone_number || "",
+            healthInsurance: response.data.insurance_info?.provider || "",
+            medications: Array.isArray(response.data.current_medications) 
+              ? response.data.current_medications.join(", ") 
+              : response.data.current_medications || "",
+            allergies: Array.isArray(response.data.allergies) 
+              ? response.data.allergies.join(", ") 
+              : response.data.allergies || "",
+            reasonForVisit: response.data.notes || "",
+            disabilities: "",
+            emergencyContact: response.data.emergency_contact_name || "",
+            emergencyPhone: response.data.emergency_contact_phone || ""
+          };
 
-      // Add to patients list
-      setPatients(prev => [...prev, newPatient]);
+          setPatients(prev => prev.map(patient => 
+            patient.id === editingPatient.id ? updatedPatient : patient
+          ));
+        }
+      } else {
+        // Create new patient
+        const nameParts = formData.name.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'N/A';
+        
+        const patientData: PatientCreateData = {
+          first_name: firstName,
+          last_name: lastName,
+          date_of_birth: formData.dob + 'T00:00:00.000Z', // Convert to ISO datetime format
+          gender: formData.gender,
+          phone_number: formData.phoneNumber || undefined,
+          address: formData.address || undefined,
+          emergency_contact_name: formData.emergencyContact || undefined,
+          emergency_contact_phone: formData.emergencyPhone || undefined,
+          current_medications: formData.medications ? formData.medications.split(',').map(m => m.trim()).filter(m => m) : [],
+          allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()).filter(a => a) : [],
+          insurance_info: formData.healthInsurance ? { provider: formData.healthInsurance } : {},
+          notes: formData.reasonForVisit || undefined
+        };
+
+        const response = await apiService.createPatient(patientData);
+        
+        if (response.success && response.data) {
+          const newPatient: Patient = {
+            id: response.data.id,
+            name: `${response.data.first_name} ${response.data.last_name}`,
+            gender: convertGender(response.data.gender),
+            dob: response.data.date_of_birth.split('T')[0],
+            address: response.data.address || "",
+            phoneNumber: response.data.phone_number || "",
+            healthInsurance: response.data.insurance_info?.provider || "",
+            medications: Array.isArray(response.data.current_medications) 
+              ? response.data.current_medications.join(", ") 
+              : response.data.current_medications || "",
+            allergies: Array.isArray(response.data.allergies) 
+              ? response.data.allergies.join(", ") 
+              : response.data.allergies || "",
+            reasonForVisit: response.data.notes || "",
+            disabilities: "",
+            emergencyContact: response.data.emergency_contact_name || "",
+            emergencyPhone: response.data.emergency_contact_phone || ""
+          };
+
+          setPatients(prev => [...prev, newPatient]);
+        }
+      }
+
+      // Reset form and close modal
+      setFormData({
+        name: "",
+        gender: "Male",
+        dob: "",
+        address: "",
+        phoneNumber: "",
+        healthInsurance: "",
+        medications: "",
+        allergies: "",
+        reasonForVisit: "",
+        disabilities: "",
+        emergencyContact: "",
+        emergencyPhone: ""
+      });
+      setEditingPatient(null);
+      setIsModalOpen(false);
+      
+    } catch (error) {
+      console.error('Failed to save patient:', error);
+      alert('Failed to save patient. Please try again.');
     }
-
-    // Reset form and close modal
-    setFormData({
-      name: "",
-      gender: "Male",
-      dob: "",
-      age: "",
-      address: "",
-      phoneNumber: "",
-      healthInsurance: "",
-      medications: "",
-      allergies: "",
-      reasonForVisit: "",
-      disabilities: "",
-      emergencyContact: "",
-      emergencyPhone: ""
-    });
-    setEditingPatient(null);
-    setIsModalOpen(false);
   };
 
   const handleCloseModal = () => {
@@ -209,7 +240,6 @@ const Patients: React.FC = () => {
       name: "",
       gender: "Male",
       dob: "",
-      age: "",
       address: "",
       phoneNumber: "",
       healthInsurance: "",
@@ -234,7 +264,6 @@ const Patients: React.FC = () => {
         name: patientToEdit.name,
         gender: patientToEdit.gender,
         dob: patientToEdit.dob,
-        age: patientToEdit.age.toString(),
         address: patientToEdit.address,
         phoneNumber: patientToEdit.phoneNumber,
         healthInsurance: patientToEdit.healthInsurance,
@@ -349,9 +378,6 @@ const Patients: React.FC = () => {
                   Gender
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Age
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Phone
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -387,12 +413,6 @@ const Patients: React.FC = () => {
                     onClick={() => handlePatientClick(patient.id)}
                   >
                     {patient.gender}
-                  </td>
-                  <td 
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                    onClick={() => handlePatientClick(patient.id)}
-                  >
-                    {patient.age}
                   </td>
                   <td 
                     className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
@@ -494,8 +514,8 @@ const Patients: React.FC = () => {
                    />
                  </div>
 
-                 {/* Gender, DOB, Age Row */}
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 {/* Gender and DOB Row */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div>
                      <label htmlFor="gender" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                        <UserCheck size={16} />
@@ -531,22 +551,6 @@ const Patients: React.FC = () => {
                      />
                    </div>
 
-                   <div>
-                     <label htmlFor="age" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                       <Calendar size={16} />
-                       Age
-                     </label>
-                     <input
-                       type="number"
-                       id="age"
-                       name="age"
-                       value={formData.age}
-                       onChange={handleInputChange}
-                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base bg-gray-50"
-                       placeholder="Auto-calculated"
-                       readOnly
-                     />
-                   </div>
                  </div>
                </div>
 
@@ -567,8 +571,7 @@ const Patients: React.FC = () => {
                      value={formData.address}
                      onChange={handleInputChange}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                     placeholder="Enter full address"
-                     required
+                     placeholder="Enter full address (optional)"
                    />
                  </div>
 
@@ -585,8 +588,7 @@ const Patients: React.FC = () => {
                      value={formData.phoneNumber}
                      onChange={handleInputChange}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                     placeholder="(123) 456-7890"
-                     required
+                     placeholder="(123) 456-7890 (optional)"
                    />
                  </div>
 
@@ -604,8 +606,7 @@ const Patients: React.FC = () => {
                        value={formData.emergencyContact}
                        onChange={handleInputChange}
                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       placeholder="Emergency contact name"
-                       required
+                       placeholder="Emergency contact name (optional)"
                      />
                    </div>
 
@@ -621,8 +622,7 @@ const Patients: React.FC = () => {
                        value={formData.emergencyPhone}
                        onChange={handleInputChange}
                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       placeholder="(123) 456-7890"
-                       required
+                       placeholder="(123) 456-7890 (optional)"
                      />
                    </div>
                  </div>
@@ -645,28 +645,26 @@ const Patients: React.FC = () => {
                      value={formData.healthInsurance}
                      onChange={handleInputChange}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                     placeholder="Insurance provider"
-                     required
+                     placeholder="Insurance provider (optional)"
                    />
                  </div>
 
-                 {/* Reason for Visit */}
-                 <div>
-                   <label htmlFor="reasonForVisit" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                     <FileText size={16} />
-                     Reason for Visit
-                   </label>
-                   <textarea
-                     id="reasonForVisit"
-                     name="reasonForVisit"
-                     value={formData.reasonForVisit}
-                     onChange={handleInputChange}
-                     rows={3}
-                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                     placeholder="Describe the reason for this visit"
-                     required
-                   />
-                 </div>
+                {/* Chronic Diseases */}
+                <div>
+                  <label htmlFor="reasonForVisit" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <FileText size={16} />
+                    Chronic Diseases
+                  </label>
+                  <textarea
+                    id="reasonForVisit"
+                    name="reasonForVisit"
+                    value={formData.reasonForVisit}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                    placeholder="List any chronic diseases or conditions (optional)"
+                  />
+                </div>
 
                  {/* Current Medications */}
                  <div>
@@ -681,7 +679,7 @@ const Patients: React.FC = () => {
                      onChange={handleInputChange}
                      rows={3}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                     placeholder="List current medications (separate with commas)"
+                     placeholder="List current medications (optional, separate with commas)"
                    />
                  </div>
 
@@ -698,7 +696,7 @@ const Patients: React.FC = () => {
                      onChange={handleInputChange}
                      rows={2}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                     placeholder="List any allergies (or enter 'None')"
+                     placeholder="List any allergies (optional)"
                    />
                  </div>
 
@@ -715,7 +713,7 @@ const Patients: React.FC = () => {
                      onChange={handleInputChange}
                      rows={2}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                     placeholder="List any disabilities or special needs (or enter 'None')"
+                     placeholder="List any disabilities or special needs (optional)"
                    />
                  </div>
                </div>

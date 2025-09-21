@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
-from database.connection import USERS_COLLECTION, PATIENTS_COLLECTION, CONVERSATIONS_COLLECTION
+from database.connection import USERS_COLLECTION, PATIENTS_COLLECTION, CONVERSATIONS_COLLECTION, SESSIONS_COLLECTION
 
 # Load environment variables
 load_dotenv()
@@ -58,16 +58,25 @@ async def setup_database():
         await db[CONVERSATIONS_COLLECTION].create_index("conversation_date")
         print("   ✅ Conversations collection indexes created")
         
+        # Sessions collection indexes
+        await db[SESSIONS_COLLECTION].create_index("session_id", unique=True)
+        await db[SESSIONS_COLLECTION].create_index([("patient_id", 1), ("date", -1)])
+        await db[SESSIONS_COLLECTION].create_index("doctor_id")
+        await db[SESSIONS_COLLECTION].create_index("date")
+        print("   ✅ Sessions collection indexes created")
+        
         # Display database statistics
         print("\n📊 Database Statistics:")
         
         users_count = await db[USERS_COLLECTION].count_documents({})
         patients_count = await db[PATIENTS_COLLECTION].count_documents({})
         conversations_count = await db[CONVERSATIONS_COLLECTION].count_documents({})
+        sessions_count = await db[SESSIONS_COLLECTION].count_documents({})
         
         print(f"   👥 Users: {users_count}")
         print(f"   🏥 Patients: {patients_count}")
         print(f"   💬 Conversations: {conversations_count}")
+        print(f"   📝 Sessions: {sessions_count}")
         
         # Show collections
         collections = await db.list_collection_names()

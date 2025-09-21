@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from bson import ObjectId
 from enum import Enum
+import uuid
 
 from pydantic import field_validator
 
@@ -64,6 +65,13 @@ class UserInDB(UserBase):
     is_active: bool = True
     patient_ids: List[PyObjectId] = []
 
+    @field_validator('patient_ids', mode='before')
+    @classmethod
+    def convert_objectids_to_strings(cls, v):
+        if isinstance(v, list):
+            return [str(item) if isinstance(item, ObjectId) else item for item in v]
+        return v
+
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -114,6 +122,7 @@ class PatientUpdate(BaseModel):
 class PatientInDB(PatientBase):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     doctor_id: PyObjectId  # ID of the doctor/nurse who manages this patient
+    session_ids: List[str] = []  # List of session UUIDs
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True
@@ -126,6 +135,7 @@ class PatientInDB(PatientBase):
 class PatientResponse(PatientBase):
     id: str
     doctor_id: str
+    session_ids: List[str] = []
     created_at: datetime
     updated_at: datetime
     is_active: bool
@@ -157,6 +167,46 @@ class ConversationResponse(ConversationBase):
     class Config:
         json_encoders = {ObjectId: str}
 
+# Session Models
+class SessionBase(BaseModel):
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    patient_id: PyObjectId
+    doctor_id: PyObjectId
+    title: str
+    transcript: str
+    summary: Optional[str] = None
+    date: datetime = Field(default_factory=datetime.utcnow)
+    duration: int = 0  # in seconds
+    status: str = "completed"  # completed, in_progress, draft
+
+class SessionCreate(SessionBase):
+    pass
+
+class SessionUpdate(BaseModel):
+    title: Optional[str] = None
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    duration: Optional[int] = None
+    status: Optional[str] = None
+
+class SessionInDB(SessionBase):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+class SessionResponse(SessionBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        json_encoders = {ObjectId: str}
+
 # API Response Models
 class StandardResponse(BaseModel):
     success: bool
@@ -171,3 +221,9 @@ class PatientListResponse(StandardResponse):
 
 class PatientDetailResponse(StandardResponse):
     data: Optional[PatientResponse] = None
+
+class SessionListResponse(StandardResponse):
+    data: Optional[List[SessionResponse]] = None
+
+class SessionDetailResponse(StandardResponse):
+    data: Optional[SessionResponse] = None
