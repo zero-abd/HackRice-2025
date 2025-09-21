@@ -1,23 +1,37 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, Filter, UserPlus, MoreVertical, X, Calendar, User, Stethoscope, Activity, Edit, Trash2 } from "lucide-react";
+import { Search, Filter, UserPlus, MoreVertical, X, Calendar, User, Edit, Trash2, Phone, MapPin, Shield, Pill, AlertTriangle, FileText, Accessibility, UserCheck } from "lucide-react";
 
 interface Patient {
   id: string;
   name: string;
+  gender: "Male" | "Female" | "Other";
+  dob: string;
   age: number;
-  condition: string;
-  status: "Active" | "Recovered" | "Critical";
-  lastVisit: string;
-  doctor: string;
+  address: string;
+  phoneNumber: string;
+  healthInsurance: string;
+  medications: string;
+  allergies: string;
+  reasonForVisit: string;
+  disabilities: string;
+  emergencyContact: string;
+  emergencyPhone: string;
 }
 
 interface PatientFormData {
   name: string;
+  gender: "Male" | "Female" | "Other";
+  dob: string;
   age: string;
-  condition: string;
-  status: "Active" | "Recovered" | "Critical";
-  lastVisit: string;
-  doctor: string;
+  address: string;
+  phoneNumber: string;
+  healthInsurance: string;
+  medications: string;
+  allergies: string;
+  reasonForVisit: string;
+  disabilities: string;
+  emergencyContact: string;
+  emergencyPhone: string;
 }
 
 const Patients: React.FC = () => {
@@ -25,72 +39,94 @@ const Patients: React.FC = () => {
     {
       id: "1",
       name: "John Smith",
+      gender: "Male",
+      dob: "1979-03-15",
       age: 45,
-      condition: "Hypertension",
-      status: "Active",
-      lastVisit: "2024-01-15",
-      doctor: "Dr. Johnson"
+      address: "123 Main St, Houston, TX 77001",
+      phoneNumber: "(713) 555-0123",
+      healthInsurance: "Blue Cross Blue Shield",
+      medications: "Lisinopril, Metformin",
+      allergies: "Penicillin",
+      reasonForVisit: "Regular checkup",
+      disabilities: "None",
+      emergencyContact: "Jane Smith",
+      emergencyPhone: "(713) 555-0124"
     },
     {
       id: "2",
       name: "Sarah Wilson",
+      gender: "Female",
+      dob: "1992-07-22",
       age: 32,
-      condition: "Diabetes",
-      status: "Recovered",
-      lastVisit: "2024-01-10",
-      doctor: "Dr. Brown"
+      address: "456 Oak Ave, Houston, TX 77002",
+      phoneNumber: "(713) 555-0125",
+      healthInsurance: "Aetna",
+      medications: "Insulin, Metformin",
+      allergies: "None",
+      reasonForVisit: "Diabetes follow-up",
+      disabilities: "None",
+      emergencyContact: "Mike Wilson",
+      emergencyPhone: "(713) 555-0126"
     },
     {
       id: "3",
       name: "Michael Davis",
+      gender: "Male",
+      dob: "1966-11-08",
       age: 58,
-      condition: "Heart Disease",
-      status: "Critical",
-      lastVisit: "2024-01-18",
-      doctor: "Dr. Johnson"
-    },
-    {
-      id: "4",
-      name: "Emily Johnson",
-      age: 28,
-      condition: "Asthma",
-      status: "Active",
-      lastVisit: "2024-01-12",
-      doctor: "Dr. Smith"
-    },
+      address: "789 Pine St, Houston, TX 77003",
+      phoneNumber: "(713) 555-0127",
+      healthInsurance: "Medicare",
+      medications: "Atorvastatin, Carvedilol",
+      allergies: "Shellfish",
+      reasonForVisit: "Chest pain",
+      disabilities: "Mobility impairment",
+      emergencyContact: "Linda Davis",
+      emergencyPhone: "(713) 555-0128"
+    }
   ]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [formData, setFormData] = useState<PatientFormData>({
     name: "",
+    gender: "Male",
+    dob: "",
     age: "",
-    condition: "",
-    status: "Active",
-    lastVisit: "",
-    doctor: ""
+    address: "",
+    phoneNumber: "",
+    healthInsurance: "",
+    medications: "",
+    allergies: "",
+    reasonForVisit: "",
+    disabilities: "",
+    emergencyContact: "",
+    emergencyPhone: ""
   });
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const getStatusColor = (status: Patient["status"]) => {
-    switch (status) {
-      case "Active":
-        return "bg-blue-100 text-blue-800";
-      case "Recovered":
-        return "bg-green-100 text-green-800";
-      case "Critical":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+  // Calculate age from date of birth
+  const calculateAge = (dob: string) => {
+    const today = new Date();
+    const birthDate = new Date(dob);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
     }
+    return age;
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    const updatedFormData = { ...formData, [name]: value };
+    
+    // Auto-calculate age when DOB changes
+    if (name === 'dob' && value) {
+      updatedFormData.age = calculateAge(value).toString();
+    }
+    
+    setFormData(updatedFormData);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -103,11 +139,18 @@ const Patients: React.FC = () => {
     const newPatient: Patient = {
       id: newId,
       name: formData.name,
+      gender: formData.gender,
+      dob: formData.dob,
       age: parseInt(formData.age),
-      condition: formData.condition,
-      status: formData.status,
-      lastVisit: formData.lastVisit,
-      doctor: formData.doctor
+      address: formData.address,
+      phoneNumber: formData.phoneNumber,
+      healthInsurance: formData.healthInsurance,
+      medications: formData.medications,
+      allergies: formData.allergies,
+      reasonForVisit: formData.reasonForVisit,
+      disabilities: formData.disabilities,
+      emergencyContact: formData.emergencyContact,
+      emergencyPhone: formData.emergencyPhone
     };
 
     // Add to patients list
@@ -116,11 +159,18 @@ const Patients: React.FC = () => {
     // Reset form and close modal
     setFormData({
       name: "",
+      gender: "Male",
+      dob: "",
       age: "",
-      condition: "",
-      status: "Active",
-      lastVisit: "",
-      doctor: ""
+      address: "",
+      phoneNumber: "",
+      healthInsurance: "",
+      medications: "",
+      allergies: "",
+      reasonForVisit: "",
+      disabilities: "",
+      emergencyContact: "",
+      emergencyPhone: ""
     });
     setIsModalOpen(false);
   };
@@ -129,11 +179,18 @@ const Patients: React.FC = () => {
     setIsModalOpen(false);
     setFormData({
       name: "",
+      gender: "Male",
+      dob: "",
       age: "",
-      condition: "",
-      status: "Active",
-      lastVisit: "",
-      doctor: ""
+      address: "",
+      phoneNumber: "",
+      healthInsurance: "",
+      medications: "",
+      allergies: "",
+      reasonForVisit: "",
+      disabilities: "",
+      emergencyContact: "",
+      emergencyPhone: ""
     });
   };
 
@@ -211,19 +268,19 @@ const Patients: React.FC = () => {
                   Patient
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Gender
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Age
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Condition
+                  Phone
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  Insurance
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Visit
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Doctor
+                  Reason for Visit
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -245,21 +302,19 @@ const Patients: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {patient.gender}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {patient.age}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {patient.condition}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(patient.status)}`}>
-                      {patient.status}
-                    </span>
+                    {patient.phoneNumber}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(patient.lastVisit).toLocaleDateString()}
+                    {patient.healthInsurance}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {patient.doctor}
+                    {patient.reasonForVisit}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
                     <div className="relative" ref={openDropdownId === patient.id ? dropdownRef : null}>
@@ -318,9 +373,12 @@ const Patients: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-               <div className="space-y-6">
-                 {/* Name - Full Width */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+               {/* Personal Information Section */}
+               <div className="space-y-4">
+                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Personal Information</h3>
+                 
+                 {/* Full Name */}
                  <div>
                    <label htmlFor="name" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                      <User size={16} />
@@ -337,9 +395,44 @@ const Patients: React.FC = () => {
                      required
                    />
                  </div>
- 
-                 {/* Age, Status, and Condition Row */}
+
+                 {/* Gender, DOB, Age Row */}
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                   <div>
+                     <label htmlFor="gender" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                       <UserCheck size={16} />
+                       Gender
+                     </label>
+                     <select
+                       id="gender"
+                       name="gender"
+                       value={formData.gender}
+                       onChange={handleInputChange}
+                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                       required
+                     >
+                       <option value="Male">Male</option>
+                       <option value="Female">Female</option>
+                       <option value="Other">Other</option>
+                     </select>
+                   </div>
+
+                   <div>
+                     <label htmlFor="dob" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                       <Calendar size={16} />
+                       Date of Birth
+                     </label>
+                     <input
+                       type="date"
+                       id="dob"
+                       name="dob"
+                       value={formData.dob}
+                       onChange={handleInputChange}
+                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                       required
+                     />
+                   </div>
+
                    <div>
                      <label htmlFor="age" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                        <Calendar size={16} />
@@ -351,85 +444,181 @@ const Patients: React.FC = () => {
                        name="age"
                        value={formData.age}
                        onChange={handleInputChange}
-                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       placeholder="Age"
-                       min="0"
-                       max="150"
-                       required
+                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base bg-gray-50"
+                       placeholder="Auto-calculated"
+                       readOnly
                      />
                    </div>
- 
-                   <div>
-                     <label htmlFor="status" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                       <Activity size={16} />
-                       Status
-                     </label>
-                     <select
-                       id="status"
-                       name="status"
-                       value={formData.status}
-                       onChange={handleInputChange}
-                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       required
-                     >
-                       <option value="Active">Active</option>
-                       <option value="Recovered">Recovered</option>
-                       <option value="Critical">Critical</option>
-                     </select>
-                   </div>
+                 </div>
+               </div>
 
+               {/* Contact Information Section */}
+               <div className="space-y-4">
+                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Contact Information</h3>
+                 
+                 {/* Address */}
+                 <div>
+                   <label htmlFor="address" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <MapPin size={16} />
+                     Address
+                   </label>
+                   <input
+                     type="text"
+                     id="address"
+                     name="address"
+                     value={formData.address}
+                     onChange={handleInputChange}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                     placeholder="Enter full address"
+                     required
+                   />
+                 </div>
+
+                 {/* Phone Number */}
+                 <div>
+                   <label htmlFor="phoneNumber" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <Phone size={16} />
+                     Phone Number
+                   </label>
+                   <input
+                     type="tel"
+                     id="phoneNumber"
+                     name="phoneNumber"
+                     value={formData.phoneNumber}
+                     onChange={handleInputChange}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                     placeholder="(123) 456-7890"
+                     required
+                   />
+                 </div>
+
+                 {/* Emergency Contact Information */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div>
-                     <label htmlFor="condition" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                       <Stethoscope size={16} />
-                       Condition
+                     <label htmlFor="emergencyContact" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                       <UserCheck size={16} />
+                       Emergency Contact
                      </label>
                      <input
                        type="text"
-                       id="condition"
-                       name="condition"
-                       value={formData.condition}
+                       id="emergencyContact"
+                       name="emergencyContact"
+                       value={formData.emergencyContact}
                        onChange={handleInputChange}
                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       placeholder="Enter medical condition"
+                       placeholder="Emergency contact name"
+                       required
+                     />
+                   </div>
+
+                   <div>
+                     <label htmlFor="emergencyPhone" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                       <Phone size={16} />
+                       Emergency Phone
+                     </label>
+                     <input
+                       type="tel"
+                       id="emergencyPhone"
+                       name="emergencyPhone"
+                       value={formData.emergencyPhone}
+                       onChange={handleInputChange}
+                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                       placeholder="(123) 456-7890"
                        required
                      />
                    </div>
                  </div>
- 
-                 {/* Visit Date and Doctor Row */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div>
-                     <label htmlFor="lastVisit" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                       <Calendar size={16} />
-                       Visit Date
-                     </label>
-                     <input
-                       type="date"
-                       id="lastVisit"
-                       name="lastVisit"
-                       value={formData.lastVisit}
-                       onChange={handleInputChange}
-                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       required
-                     />
-                   </div>
- 
-                   <div>
-                     <label htmlFor="doctor" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                       <User size={16} />
-                       Doctor Assigned
-                     </label>
-                     <input
-                       type="text"
-                       id="doctor"
-                       name="doctor"
-                       value={formData.doctor}
-                       onChange={handleInputChange}
-                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
-                       placeholder="Enter assigned doctor's name"
-                       required
-                     />
-                   </div>
+               </div>
+
+               {/* Medical Information Section */}
+               <div className="space-y-4">
+                 <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Medical Information</h3>
+                 
+                 {/* Health Insurance */}
+                 <div>
+                   <label htmlFor="healthInsurance" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <Shield size={16} />
+                     Health Insurance
+                   </label>
+                   <input
+                     type="text"
+                     id="healthInsurance"
+                     name="healthInsurance"
+                     value={formData.healthInsurance}
+                     onChange={handleInputChange}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                     placeholder="Insurance provider"
+                     required
+                   />
+                 </div>
+
+                 {/* Reason for Visit */}
+                 <div>
+                   <label htmlFor="reasonForVisit" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <FileText size={16} />
+                     Reason for Visit
+                   </label>
+                   <textarea
+                     id="reasonForVisit"
+                     name="reasonForVisit"
+                     value={formData.reasonForVisit}
+                     onChange={handleInputChange}
+                     rows={3}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                     placeholder="Describe the reason for this visit"
+                     required
+                   />
+                 </div>
+
+                 {/* Current Medications */}
+                 <div>
+                   <label htmlFor="medications" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <Pill size={16} />
+                     Current Medications
+                   </label>
+                   <textarea
+                     id="medications"
+                     name="medications"
+                     value={formData.medications}
+                     onChange={handleInputChange}
+                     rows={3}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                     placeholder="List current medications (separate with commas)"
+                   />
+                 </div>
+
+                 {/* Allergies */}
+                 <div>
+                   <label htmlFor="allergies" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <AlertTriangle size={16} />
+                     Allergies
+                   </label>
+                   <textarea
+                     id="allergies"
+                     name="allergies"
+                     value={formData.allergies}
+                     onChange={handleInputChange}
+                     rows={2}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                     placeholder="List any allergies (or enter 'None')"
+                   />
+                 </div>
+
+                 {/* Disabilities */}
+                 <div>
+                   <label htmlFor="disabilities" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                     <Accessibility size={16} />
+                     Disabilities/Special Needs
+                   </label>
+                   <textarea
+                     id="disabilities"
+                     name="disabilities"
+                     value={formData.disabilities}
+                     onChange={handleInputChange}
+                     rows={2}
+                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
+                     placeholder="List any disabilities or special needs (or enter 'None')"
+                   />
                  </div>
                </div>
 
