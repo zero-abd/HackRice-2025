@@ -12,8 +12,11 @@
   "dependencies": {
     "@auth0/auth0-react": "^2.5.0",
     "@auth0/auth0-spa-js": "^2.4.1",
+    "@google-cloud/speech": "^7.2.0",
+    "@google-cloud/text-to-speech": "^6.3.0",
     "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/postcss": "^4.1.13",
+    "@types/dom-mediacapture-record": "^1.0.22",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

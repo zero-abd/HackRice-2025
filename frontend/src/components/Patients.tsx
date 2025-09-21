@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, Filter, UserPlus, MoreVertical, X, Calendar, User, Edit, Trash2, Phone, MapPin, Shield, Pill, AlertTriangle, FileText, Accessibility, UserCheck } from "lucide-react";
+import PatientDashboard from "./PatientDashboard";
 
 interface Patient {
   id: string;
@@ -35,6 +36,7 @@ interface PatientFormData {
 }
 
 const Patients: React.FC = () => {
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([
     {
       id: "1",
@@ -281,6 +283,24 @@ const Patients: React.FC = () => {
     };
   }, [isModalOpen]);
 
+  const handlePatientClick = (patientId: string) => {
+    setSelectedPatientId(patientId);
+  };
+
+  const handleBackToPatients = () => {
+    setSelectedPatientId(null);
+  };
+
+  // If a patient is selected, show the patient dashboard
+  if (selectedPatientId) {
+    return (
+      <PatientDashboard
+        patientId={selectedPatientId}
+        onBack={handleBackToPatients}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -347,8 +367,11 @@ const Patients: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {patients.map((patient) => (
-                <tr key={patient.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                <tr key={patient.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap"
+                    onClick={() => handlePatientClick(patient.id)}
+                  >
                     <div className="flex items-center">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
                         {patient.name.split(' ').map(n => n[0]).join('')}
@@ -359,19 +382,34 @@ const Patients: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    onClick={() => handlePatientClick(patient.id)}
+                  >
                     {patient.gender}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    onClick={() => handlePatientClick(patient.id)}
+                  >
                     {patient.age}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    onClick={() => handlePatientClick(patient.id)}
+                  >
                     {patient.phoneNumber}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    onClick={() => handlePatientClick(patient.id)}
+                  >
                     {patient.healthInsurance}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    onClick={() => handlePatientClick(patient.id)}
+                  >
                     {patient.reasonForVisit}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
