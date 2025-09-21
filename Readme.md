@@ -6,8 +6,8 @@ This guide will walk you through setting up the HackRice 2025 project components
 
 ```
 HackRice-2025/
-├── frontend/          # React + TypeScript frontend
-├── backend/           # Backend API (coming soon)
+├── frontend/          # React + TypeScript frontend with Auth0
+├── backend/           # FastAPI backend with Ollama LLM integration
 ```
 
 ## Prerequisites
@@ -109,7 +109,23 @@ npm run dev
 
 # Backend Setup
 
-This backend service uses Ollama with Qwen models to analyze nurse-patient conversations and generate structured medical summaries.
+This FastAPI backend service uses Ollama with Qwen models to analyze nurse-patient conversations and generate structured medical summaries. The application features a modern class-based architecture with real-time streaming capabilities.
+
+## Architecture
+
+### Key Components:
+- **`llm_service.py`**: Contains the `ConversationSummarizer` class with all LLM-related functionality
+- **`server.py`**: FastAPI application with clean endpoint definitions
+- **`requirements.txt`**: FastAPI, Uvicorn, Pydantic, and Ollama dependencies
+
+### Key Features:
+- ✅ FastAPI with automatic API documentation
+- ✅ Real-time streaming analysis using Server-Sent Events (SSE)
+- ✅ Pydantic models for request/response validation
+- ✅ Async/await support for better performance
+- ✅ Type hints throughout the codebase
+- ✅ Separation of concerns with modular design
+- ✅ Interactive API documentation
 
 ## Setup Instructions
 
@@ -119,8 +135,6 @@ This backend service uses Ollama with Qwen models to analyze nurse-patient conve
 cd backend
 pip install -r requirements.txt
 ```
-
-**Note:** This setup uses the Ollama Python library instead of HTTP API calls for better performance and easier integration.
 
 ### 2. Install and Setup Ollama
 
@@ -132,47 +146,115 @@ pip install -r requirements.txt
 
 3. Download the Qwen model (in a new terminal):
    ```bash
-   # Download one of these models:
-   # ollama pull qwen3:8b
+   ollama pull qwen3:8b
    ```
 
-4. Update the `MODEL_NAME` in `server.py` to match your downloaded model:
+4. The model name is configured in `server.py` as:
    ```python
    MODEL_NAME = "qwen3:8b"
    ```
 
-### 3. Run the Server
+### 3. Run the FastAPI Server
 
 ```bash
 python server.py
 ```
 
-The server will start on `http://localhost:5000`
+The server will start on `http://localhost:8000`
+
+### 4. Access API Documentation
+FastAPI automatically generates interactive API documentation:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## API Endpoints
 
-### Health Check
-```
-GET /health
-```
-Returns server status and Ollama connection status.
+### GET /health
+Health check endpoint that verifies Ollama connection and model availability.
 
-### Summarize Conversation
+**Response:**
+```json
+{
+  "status": "healthy",
+  "ollama_connected": true,
+  "model": "qwen3:8b",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
 ```
-POST /summarize-conversation
-Content-Type: application/json
 
+### POST /summarize-conversation
+Summarizes a nurse-patient conversation into structured medical data (traditional endpoint).
+
+**Request:**
+```json
 {
   "conversation": "Nurse: How are you feeling today?\nPatient: I have a headache..."
 }
 ```
 
-Returns structured JSON with:
-- `vitals`: Blood pressure, heart rate, temperature, etc.
-- `symptoms`: Current symptoms, duration, severity
-- `medical_history`: Medications, allergies, conditions
-- `patient_concerns`: Patient's specific concerns
-- `nurse_observations`: Nurse's observations
-- `additional_characteristics`: Mobility, mental state, etc.
-- `summary`: Brief summary for doctor review
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "vitals": {"blood_pressure": "120/80", "heart_rate": "72"},
+    "symptoms": {"primary": "headache", "severity": "moderate"},
+    "medical_history": {"medications": [], "allergies": []},
+    "patient_concerns": ["headache pain"],
+    "nurse_observations": ["patient appears alert"],
+    "additional_characteristics": {"mobility": "good"},
+    "summary": "Patient reports headache, vitals stable"
+  }
+}
+```
+
+### POST /summarize-conversation-stream 🌊 **NEW!**
+**Real-time streaming** version of conversation summarization using Server-Sent Events (SSE).
+
+**Benefits of Streaming:**
+- ⚡ **Immediate feedback** - See analysis start instantly
+- 🔄 **Real-time progress** - Watch the AI think through the conversation
+- 📱 **Better UX** - No waiting for complete response
+- ⏱️ **Faster perceived performance** - Users see results as they're generated
+
+**Request:** Same as traditional endpoint
+
+**Response:** Stream of Server-Sent Events
+```
+data: {"type": "metadata", "data": {"started_at": "...", "model_used": "qwen3:8b", "status": "started"}}
+
+data: {"type": "chunk", "data": {"chunk": "Let me analyze", "accumulated_length": 15, "done": false}}
+
+data: {"type": "final", "data": {"vitals": {...}, "symptoms": {...}, "metadata": {...}}}
+
+data: {"type": "complete", "data": {"message": "Stream completed"}}
+```
+
+### GET /test-conversation
+Test endpoint that processes a sample conversation.
+
+### GET /test-conversation-stream 🌊 **NEW!**
+**Streaming** test endpoint with sample conversation.
+
+## Testing
+
+### Quick Streaming Demo
+```bash
+cd backend
+python demo_streaming.py
+```
+
+## Development Notes
+
+### Error Handling
+The API uses proper HTTP status codes:
+- `200`: Success
+- `400`: Bad Request (invalid input)
+- `500`: Internal Server Error (Ollama issues, processing errors)
+
+### Troubleshooting
+1. **Import errors**: Install dependencies with `pip install -r requirements.txt`
+2. **Ollama connection failed**: Ensure `ollama serve` is running
+3. **Model not found**: Run `ollama pull qwen3:8b`
+4. **Port conflicts**: Change port in `server.py` if 8000 is in use
 
