@@ -108,4 +108,71 @@ npm run dev
 
 # Backend Setup
 
-*Coming soon - Backend API setup instructions*
+
+This backend service uses Ollama with Qwen models to analyze nurse-patient conversations and generate structured medical summaries.
+
+## Setup Instructions
+
+### 1. Install Dependencies
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+**Note:** This setup uses the Ollama Python library instead of HTTP API calls for better performance and easier integration.
+
+### 2. Install and Setup Ollama
+
+1. Download Ollama from [ollama.ai](https://ollama.ai)
+2. Install and start Ollama:
+   ```bash
+   ollama serve
+   ```
+
+3. Download the Qwen model (in a new terminal):
+   ```bash
+   # Download one of these models:
+   # ollama pull qwen3:8b
+   ```
+
+4. Update the `MODEL_NAME` in `server.py` to match your downloaded model:
+   ```python
+   MODEL_NAME = "qwen3:8b"
+   ```
+
+### 3. Run the Server
+
+```bash
+python server.py
+```
+
+The server will start on `http://localhost:5000`
+
+## API Endpoints
+
+### Health Check
+```
+GET /health
+```
+Returns server status and Ollama connection status.
+
+### Summarize Conversation
+```
+POST /summarize-conversation
+Content-Type: application/json
+
+{
+  "conversation": "Nurse: How are you feeling today?\nPatient: I have a headache..."
+}
+```
+
+Returns structured JSON with:
+- `vitals`: Blood pressure, heart rate, temperature, etc.
+- `symptoms`: Current symptoms, duration, severity
+- `medical_history`: Medications, allergies, conditions
+- `patient_concerns`: Patient's specific concerns
+- `nurse_observations`: Nurse's observations
+- `additional_characteristics`: Mobility, mental state, etc.
+- `summary`: Brief summary for doctor review
+
