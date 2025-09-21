@@ -106,8 +106,8 @@ npm run dev
 
 ---
 
-# Backend Setup
 
+# Backend Setup
 
 This backend service uses Ollama with Qwen models to analyze nurse-patient conversations and generate structured medical summaries.
 
