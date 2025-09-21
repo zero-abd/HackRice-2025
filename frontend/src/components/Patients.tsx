@@ -88,6 +88,7 @@ const Patients: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [formData, setFormData] = useState<PatientFormData>({
     name: "",
     gender: "Male",
@@ -132,29 +133,52 @@ const Patients: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Generate a new ID
-    const newId = (patients.length + 1).toString();
-    
-    // Create new patient
-    const newPatient: Patient = {
-      id: newId,
-      name: formData.name,
-      gender: formData.gender,
-      dob: formData.dob,
-      age: parseInt(formData.age),
-      address: formData.address,
-      phoneNumber: formData.phoneNumber,
-      healthInsurance: formData.healthInsurance,
-      medications: formData.medications,
-      allergies: formData.allergies,
-      reasonForVisit: formData.reasonForVisit,
-      disabilities: formData.disabilities,
-      emergencyContact: formData.emergencyContact,
-      emergencyPhone: formData.emergencyPhone
-    };
+    if (editingPatient) {
+      // Update existing patient
+      const updatedPatient: Patient = {
+        ...editingPatient,
+        name: formData.name,
+        gender: formData.gender,
+        dob: formData.dob,
+        age: parseInt(formData.age),
+        address: formData.address,
+        phoneNumber: formData.phoneNumber,
+        healthInsurance: formData.healthInsurance,
+        medications: formData.medications,
+        allergies: formData.allergies,
+        reasonForVisit: formData.reasonForVisit,
+        disabilities: formData.disabilities,
+        emergencyContact: formData.emergencyContact,
+        emergencyPhone: formData.emergencyPhone
+      };
 
-    // Add to patients list
-    setPatients(prev => [...prev, newPatient]);
+      // Update patient in the list
+      setPatients(prev => prev.map(patient => 
+        patient.id === editingPatient.id ? updatedPatient : patient
+      ));
+    } else {
+      // Create new patient
+      const newId = (patients.length + 1).toString();
+      const newPatient: Patient = {
+        id: newId,
+        name: formData.name,
+        gender: formData.gender,
+        dob: formData.dob,
+        age: parseInt(formData.age),
+        address: formData.address,
+        phoneNumber: formData.phoneNumber,
+        healthInsurance: formData.healthInsurance,
+        medications: formData.medications,
+        allergies: formData.allergies,
+        reasonForVisit: formData.reasonForVisit,
+        disabilities: formData.disabilities,
+        emergencyContact: formData.emergencyContact,
+        emergencyPhone: formData.emergencyPhone
+      };
+
+      // Add to patients list
+      setPatients(prev => [...prev, newPatient]);
+    }
 
     // Reset form and close modal
     setFormData({
@@ -172,11 +196,13 @@ const Patients: React.FC = () => {
       emergencyContact: "",
       emergencyPhone: ""
     });
+    setEditingPatient(null);
     setIsModalOpen(false);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    setEditingPatient(null);
     setFormData({
       name: "",
       gender: "Male",
@@ -199,8 +225,26 @@ const Patients: React.FC = () => {
   };
 
   const handleEditPatient = (patientId: string) => {
-    // TODO: Implement edit functionality
-    console.log("Edit patient:", patientId);
+    const patientToEdit = patients.find(patient => patient.id === patientId);
+    if (patientToEdit) {
+      setEditingPatient(patientToEdit);
+      setFormData({
+        name: patientToEdit.name,
+        gender: patientToEdit.gender,
+        dob: patientToEdit.dob,
+        age: patientToEdit.age.toString(),
+        address: patientToEdit.address,
+        phoneNumber: patientToEdit.phoneNumber,
+        healthInsurance: patientToEdit.healthInsurance,
+        medications: patientToEdit.medications,
+        allergies: patientToEdit.allergies,
+        reasonForVisit: patientToEdit.reasonForVisit,
+        disabilities: patientToEdit.disabilities,
+        emergencyContact: patientToEdit.emergencyContact,
+        emergencyPhone: patientToEdit.emergencyPhone
+      });
+      setIsModalOpen(true);
+    }
     setOpenDropdownId(null);
   };
 
@@ -222,6 +266,20 @@ const Patients: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Close modal when pressing Escape key
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isModalOpen) {
+        handleCloseModal();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isModalOpen]);
 
   return (
     <div className="space-y-6">
@@ -259,7 +317,7 @@ const Patients: React.FC = () => {
       </div>
 
       {/* Patient List */}
-      <div className="glass-card overflow-hidden">
+      <div className="glass-card">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50/50 border-b border-gray-200">
@@ -327,7 +385,7 @@ const Patients: React.FC = () => {
                       
                       {/* Dropdown Menu */}
                       {openDropdownId === patient.id && (
-                        <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                        <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-2xl border border-gray-200 py-2 z-50 ring-1 ring-black ring-opacity-5">
                           <button
                             onClick={() => handleEditPatient(patient.id)}
                             className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
@@ -364,7 +422,9 @@ const Patients: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Add New Patient</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {editingPatient ? 'Edit Patient' : 'Add New Patient'}
+              </h2>
               <button
                 onClick={handleCloseModal}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -630,12 +690,12 @@ const Patients: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  Add Patient
-                </button>
+                 <button
+                   type="submit"
+                   className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                 >
+                   {editingPatient ? 'Update Patient' : 'Add Patient'}
+                 </button>
               </div>
             </form>
           </div>
