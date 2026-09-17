@@ -1,260 +1,128 @@
-# HackRice 2025 - Project Setup Guide
+# DocLess
 
-This guide will walk you through setting up the HackRice 2025 project components.
+**A clinical documentation assistant that turns nurse-patient conversations into structured records, using a local LLM.** Built at HackRice 2025 (September 2025).
 
-## Project Structure
-
-```
-HackRice-2025/
-├── frontend/          # React + TypeScript frontend with Auth0
-├── backend/           # FastAPI backend with Ollama LLM integration
-```
-
-## Prerequisites
-- Node.js and npm installed on your machine
----
-
-# Frontend Setup
-
-## Auth0 Authentication Setup
-
-### Prerequisites for Auth0
-- An Auth0 account (sign up at [auth0.com](https://auth0.com) if you don't have one)
-
-### Step 1: Create an Auth0 Account and Application
-
-#### 1.1 Sign up for Auth0
-1. Go to [auth0.com](https://auth0.com)
-2. Click "Sign Up" and create your account
-3. Choose the **Free** plan to get started
-
-#### 1.2 Create a New Application
-1. Once logged in, navigate to the [Auth0 Dashboard](https://manage.auth0.com)
-2. Click on **"Applications"** in the left sidebar
-3. Click **"Create Application"**
-4. Fill in the application details:
-   - **Name**: `DocLess` (or any name you prefer)
-   - **Application Type**: Select **"Single Page Web Applications"**
-5. Click **"Create"**
-
-#### 1.3 Configure Application Settings
-1. In your newly created application, go to the **"Settings"** tab
-2. Scroll down to **"Application URIs"** section
-3. Configure the following URLs:
-   - **Allowed Callback URLs**: 
-     ```
-     http://localhost:5173, http://localhost:3000, http://localhost:4173
-     ```
-   - **Allowed Logout URLs**: 
-     ```
-     http://localhost:5173, http://localhost:3000, http://localhost:4173
-     ```
-   - **Allowed Web Origins**: 
-     ```
-     http://localhost:5173, http://localhost:3000, http://localhost:4173
-     ```
-4. Click **"Save Changes"**
-
-### Step 2: Get Your Auth0 Credentials
-
-#### 2.1 Copy Domain and Client ID
-1. In your Auth0 application's **"Settings"** tab
-2. Find the **"Basic Information"** section at the top
-3. Copy the following values:
-   - **Domain**: This will look like `your-tenant.auth0.com`
-   - **Client ID**: This will be a long alphanumeric string
-
-#### 2.2 Set up Environment Variables (Recommended)
-1. Copy the example environment file:
-   ```bash
-   cd frontend
-   cp .env.example .env.local
-   ```
-
-2. Open `frontend/.env.local` and replace the placeholder values with your actual Auth0 credentials:
-   ```env
-   VITE_AUTH0_DOMAIN=your-auth0-domain.auth0.com
-   VITE_AUTH0_CLIENT_ID=your-auth0-client-id
-   ```
-
-3. The `auth0-config.ts` file is already configured to use these environment variables:
-   ```typescript
-   export const auth0Config = {
-     domain: import.meta.env.VITE_AUTH0_DOMAIN,
-     clientId: import.meta.env.VITE_AUTH0_CLIENT_ID,
-     authorizationParams: {
-       redirect_uri: window.location.origin,
-       scope: "openid profile email",
-     },
-     cacheLocation: "localstorage" as const,
-     useRefreshTokens: true,
-   };
-   ```
-
-## Test Your Setup
-
-1. Start your development server:
-```bash
-cd frontend
-npm run dev
-```
-
-2. Navigate to your application in the browser
-3. Try logging in with the Auth0 login button
-4. You should be redirected to Auth0's login page
-5. After successful authentication, you should be redirected back to your app
+Nurses record a conversation with a patient, DocLess transcribes it in the browser, and a FastAPI backend running Qwen3 8B on Ollama extracts vitals, symptoms, history, concerns and observations into JSON for a doctor to review. The model runs locally, so conversation text never leaves the machine for analysis.
 
 ---
 
+## What it does
 
-# Backend Setup
+- **Sign-in and profiles.** Auth0 login for clinicians, with a profile synced to MongoDB on first sign-in.
+- **Patient management.** Add, edit and delete patients with demographics, date of birth (age calculated automatically), contact details, medical history and emergency contacts.
+- **Session recording.** Record a conversation from a patient's page and get a live transcript through the browser's Web Speech API.
+- **Structured summaries.** `POST /summarize-conversation` sends a transcript to Qwen3 8B and returns vitals, symptoms, medical history, patient concerns, nurse observations and a short summary. The prompt limits the model to facts stated in the conversation, with no medical advice.
+- **Streaming analysis.** `POST /summarize-conversation-stream` streams the model's progress and the final JSON over Server-Sent Events.
 
-This FastAPI backend service uses Ollama with Qwen models to analyze nurse-patient conversations and generate structured medical summaries. The application features a modern class-based architecture with real-time streaming capabilities.
+---
 
 ## Architecture
 
-### Key Components:
-- **`llm_service.py`**: Contains the `ConversationSummarizer` class with all LLM-related functionality
-- **`server.py`**: FastAPI application with clean endpoint definitions
-- **`requirements.txt`**: FastAPI, Uvicorn, Pydantic, and Ollama dependencies
+```mermaid
+flowchart LR
+  subgraph FE["frontend/ (React + Vite, :3000)"]
+    UI["Dashboard, Patients,<br/>Patient detail, Session recording"]
+    STT["Web Speech API<br/>live transcript"]
+  end
+  A0["Auth0"]
+  subgraph BE["backend/ (FastAPI, :8000)"]
+    API["REST: /auth, /patients,<br/>/sessions, /summarize-conversation"]
+    LLM["ConversationSummarizer<br/>llm/service.py"]
+  end
+  OL["Ollama<br/>qwen3:8b"]
+  DB[("MongoDB<br/>users, patients,<br/>sessions, conversations")]
 
-### Key Features:
-- ✅ FastAPI with automatic API documentation
-- ✅ Real-time streaming analysis using Server-Sent Events (SSE)
-- ✅ Pydantic models for request/response validation
-- ✅ Async/await support for better performance
-- ✅ Type hints throughout the codebase
-- ✅ Separation of concerns with modular design
-- ✅ Interactive API documentation
+  UI --> A0
+  UI --> STT
+  UI -- "fetch + X-User-Email" --> API
+  API --> DB
+  API --> LLM --> OL
+```
 
-## Setup Instructions
+---
 
-### 1. Install Dependencies
+## Tech stack
+
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS 4, Auth0 React SDK, Recharts, lucide-react
+- **Backend:** Python, FastAPI, Uvicorn, Pydantic, Motor and PyMongo
+- **AI:** Ollama running Qwen3 8B (`qwen3:8b`)
+- **Database:** MongoDB
+
+---
+
+## Run it locally
+
+### Prerequisites
+
+- Node.js and npm
+- Python 3 and pip
+- [Ollama](https://ollama.com) with the model pulled: `ollama pull qwen3:8b`
+- MongoDB running locally (or a MongoDB Atlas URL)
+- An Auth0 single-page application (free plan works)
+
+### 1. Backend
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-### 2. Install and Setup Ollama
+Create `backend/.env`:
 
-1. Download Ollama from [ollama.ai](https://ollama.ai)
-2. Install and start Ollama:
-   ```bash
-   ollama serve
-   ```
+```env
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DATABASE=docless_db
+```
 
-3. Download the Qwen model (in a new terminal):
-   ```bash
-   ollama pull qwen3:8b
-   ```
-
-4. The model name is configured in `server.py` as:
-   ```python
-   MODEL_NAME = "qwen3:8b"
-   ```
-
-### 3. Run the FastAPI Server
+Then:
 
 ```bash
-python server.py
+ollama serve                 # in its own terminal
+python setup_database.py     # creates collections and indexes
+python server.py             # http://localhost:8000, docs at /docs
 ```
 
-The server will start on `http://localhost:8000`
+### 2. Frontend
 
-### 4. Access API Documentation
-FastAPI automatically generates interactive API documentation:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+In the Auth0 dashboard, create a **Single Page Application** and add `http://localhost:3000` to Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins.
 
-## API Endpoints
-
-### GET /health
-Health check endpoint that verifies Ollama connection and model availability.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "ollama_connected": true,
-  "model": "qwen3:8b",
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
-
-### POST /summarize-conversation
-Summarizes a nurse-patient conversation into structured medical data (traditional endpoint).
-
-**Request:**
-```json
-{
-  "conversation": "Nurse: How are you feeling today?\nPatient: I have a headache..."
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "vitals": {"blood_pressure": "120/80", "heart_rate": "72"},
-    "symptoms": {"primary": "headache", "severity": "moderate"},
-    "medical_history": {"medications": [], "allergies": []},
-    "patient_concerns": ["headache pain"],
-    "nurse_observations": ["patient appears alert"],
-    "additional_characteristics": {"mobility": "good"},
-    "summary": "Patient reports headache, vitals stable"
-  }
-}
-```
-
-### POST /summarize-conversation-stream 🌊 **NEW!**
-**Real-time streaming** version of conversation summarization using Server-Sent Events (SSE).
-
-**Benefits of Streaming:**
-- ⚡ **Immediate feedback** - See analysis start instantly
-- 🔄 **Real-time progress** - Watch the AI think through the conversation
-- 📱 **Better UX** - No waiting for complete response
-- ⏱️ **Faster perceived performance** - Users see results as they're generated
-
-**Request:** Same as traditional endpoint
-
-**Response:** Stream of Server-Sent Events
-```
-data: {"type": "metadata", "data": {"started_at": "...", "model_used": "qwen3:8b", "status": "started"}}
-
-data: {"type": "chunk", "data": {"chunk": "Let me analyze", "accumulated_length": 15, "done": false}}
-
-data: {"type": "final", "data": {"vitals": {...}, "symptoms": {...}, "metadata": {...}}}
-
-data: {"type": "complete", "data": {"message": "Stream completed"}}
-```
-
-### GET /test-conversation
-Test endpoint that processes a sample conversation.
-
-### GET /test-conversation-stream 🌊 **NEW!**
-**Streaming** test endpoint with sample conversation.
-
-## Testing
-
-### Quick Streaming Demo
 ```bash
-cd backend
-python demo_streaming.py
+cd frontend
+cp .env.example .env.local   # set VITE_AUTH0_DOMAIN and VITE_AUTH0_CLIENT_ID
+npm install
+npm run dev                  # http://localhost:3000
 ```
 
-## Development Notes
+The frontend calls the backend at `http://localhost:8000` (`frontend/src/services/api.ts`).
 
-### Error Handling
-The API uses proper HTTP status codes:
-- `200`: Success
-- `400`: Bad Request (invalid input)
-- `500`: Internal Server Error (Ollama issues, processing errors)
+### Try the model without the UI
 
-### Troubleshooting
-1. **Import errors**: Install dependencies with `pip install -r requirements.txt`
-2. **Ollama connection failed**: Ensure `ollama serve` is running
-3. **Model not found**: Run `ollama pull qwen3:8b`
-4. **Port conflicts**: Change port in `server.py` if 8000 is in use
+```bash
+curl http://localhost:8000/test-conversation          # summarize a built-in sample
+curl -N http://localhost:8000/test-conversation-stream   # same, streamed
+python backend/llm/demo_streaming.py                    # streaming demo client
+```
 
+More detail on the MongoDB schema and endpoints is in [`backend/README_MONGODB.md`](backend/README_MONGODB.md).
+
+---
+
+## API overview
+
+| Area | Endpoints |
+|---|---|
+| Health | `GET /health` (Ollama connection and model) |
+| Users | `POST /auth/register`, `GET /auth/profile`, `PUT /auth/profile` |
+| Patients | `POST /patients`, `GET /patients`, `GET/PUT/DELETE /patients/{id}`, `GET /patients/{id}/conversations` |
+| Sessions | `POST/GET /patients/{id}/sessions`, `GET/PUT /sessions/{id}` |
+| Summaries | `POST /summarize-conversation`, `POST /summarize-conversation-stream`, `GET /test-conversation`, `GET /test-conversation-stream` |
+
+---
+
+## Status
+
+Hackathon prototype from HackRice 2025. Known gaps:
+
+- Recorded sessions are kept in page state; the recorder is not yet wired to the session and summary endpoints.
+- The backend identifies users by an `X-User-Email` header rather than verifying the Auth0 token, and CORS allows all origins. Both need hardening before any real patient data.
+- A Google Cloud Speech-to-Text client exists in `frontend/src/services/speechToText.ts` but is not enabled; the browser's speech recognition is used instead.
