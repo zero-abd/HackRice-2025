@@ -1,228 +1,127 @@
-import React from "react";
-import { 
-  Users, 
-  Heart, 
-  TrendingUp, 
-  Calendar,
-  Activity,
-  UserCheck
-} from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import React, { useEffect, useState } from "react";
+import { Users, FileText, Sparkles, Calendar, ArrowRight } from "lucide-react";
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import StatCard from "./StatCard";
+import * as db from "../services/db";
+import type { Patient, Profile, Session } from "../types/patient";
 
-const Dashboard: React.FC = () => {
-  // Mock data for demonstration
-  const patientTrendData = [
-    { month: "Jan", patients: 120, recovered: 85 },
-    { month: "Feb", patients: 135, recovered: 92 },
-    { month: "Mar", patients: 148, recovered: 110 },
-    { month: "Apr", patients: 162, recovered: 125 },
-    { month: "May", patients: 178, recovered: 140 },
-    { month: "Jun", patients: 195, recovered: 158 },
-  ];
+interface DashboardProps {
+  profile: Profile;
+  onNavigate: (page: string) => void;
+}
 
-  const treatmentData = [
-    { name: "Cardiology", patients: 45, color: "#3B82F6" },
-    { name: "Neurology", patients: 32, color: "#10B981" },
-    { name: "Orthopedics", patients: 28, color: "#F59E0B" },
-    { name: "Pediatrics", patients: 35, color: "#EF4444" },
-    { name: "General", patients: 55, color: "#8B5CF6" },
-  ];
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
-  const weeklyData = [
-    { day: "Mon", appointments: 24 },
-    { day: "Tue", appointments: 18 },
-    { day: "Wed", appointments: 32 },
-    { day: "Thu", appointments: 28 },
-    { day: "Fri", appointments: 35 },
-    { day: "Sat", appointments: 15 },
-    { day: "Sun", appointments: 8 },
-  ];
+const Dashboard: React.FC<DashboardProps> = ({ profile, onNavigate }) => {
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+
+  useEffect(() => {
+    Promise.all([db.listPatients(), db.listSessions()]).then(([p, s]) => {
+      setPatients(p);
+      setSessions(s);
+    });
+  }, []);
+
+  const today = new Date();
+  const days = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (13 - i));
+    return d;
+  });
+  const counts = new Map<string, number>();
+  for (const s of sessions) {
+    const k = dayKey(new Date(s.createdAt));
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const chartData = days.map((d) => ({
+    day: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    sessions: counts.get(dayKey(d)) ?? 0,
+  }));
+
+  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const thisWeek = sessions.filter((s) => new Date(s.createdAt).getTime() >= weekAgo).length;
+  const withNotes = sessions.filter((s) => s.note).length;
+  const patientName = new Map(patients.map((p) => [p.id, p.name]));
+  const recent = sessions.slice(0, 5);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard Overview</h1>
-        <p className="text-gray-600">Welcome back! Here's what's happening with your patients today.</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome, {profile.name.split(" ")[0]}</h1>
+        <p className="text-gray-600">Your patients and visit notes, stored only in this browser.</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Patients" value={patients.length} icon={Users} iconColor="text-blue-600" />
+        <StatCard title="Sessions recorded" value={sessions.length} icon={FileText} iconColor="text-green-600" />
         <StatCard
-          title="Total Patients"
-          value="1,247"
-          change="+12% from last month"
-          changeType="positive"
-          icon={Users}
-          iconColor="text-blue-600"
+          title="Structured notes"
+          value={withNotes}
+          change={sessions.length ? `${Math.round((withNotes / sessions.length) * 100)}% of sessions` : undefined}
+          icon={Sparkles}
+          iconColor="text-violet-600"
         />
-        <StatCard
-          title="Patients Recovered"
-          value="1,089"
-          change="+8% from last month"
-          changeType="positive"
-          icon={Heart}
-          iconColor="text-green-600"
-        />
-        <StatCard
-          title="Active Treatments"
-          value="158"
-          change="+3% from last month"
-          changeType="positive"
-          icon={Activity}
-          iconColor="text-orange-600"
-        />
-        <StatCard
-          title="Today's Appointments"
-          value="24"
-          change="2 more than yesterday"
-          changeType="positive"
-          icon={Calendar}
-          iconColor="text-purple-600"
-        />
+        <StatCard title="Sessions this week" value={thisWeek} icon={Calendar} iconColor="text-orange-600" />
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Patient Trends Chart */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Patient Trends</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={patientTrendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="month" stroke="#6B7280" />
-              <YAxis stroke="#6B7280" />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: "rgba(255, 255, 255, 0.9)",
-                  border: "none",
-                  borderRadius: "8px",
-                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-                }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="patients" 
-                stroke="#3B82F6" 
-                strokeWidth={3}
-                dot={{ fill: "#3B82F6", strokeWidth: 2, r: 6 }}
-                name="Total Patients"
-              />
-              <Line 
-                type="monotone" 
-                dataKey="recovered" 
-                stroke="#10B981" 
-                strokeWidth={3}
-                dot={{ fill: "#10B981", strokeWidth: 2, r: 6 }}
-                name="Recovered"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+      {patients.length === 0 && (
+        <div className="glass-card p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Get started</h3>
+            <p className="text-gray-600 text-sm">
+              Add a patient (or the fictional sample patient), start a session, record or paste the conversation, and
+              generate a structured note with your own AI key.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate("patients")}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shrink-0"
+          >
+            Go to patients <ArrowRight size={16} />
+          </button>
         </div>
+      )}
 
-        {/* Weekly Appointments */}
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Weekly Appointments</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={weeklyData}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 glass-card p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Sessions, last 14 days</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="day" stroke="#6B7280" />
-              <YAxis stroke="#6B7280" />
+              <XAxis dataKey="day" stroke="#6B7280" fontSize={12} />
+              <YAxis stroke="#6B7280" allowDecimals={false} fontSize={12} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "rgba(255, 255, 255, 0.9)",
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
                   border: "none",
                   borderRadius: "8px",
-                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                 }}
               />
-              <Bar 
-                dataKey="appointments" 
-                fill="#3B82F6"
-                radius={[4, 4, 0, 0]}
-                name="Appointments"
-              />
+              <Bar dataKey="sessions" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Sessions" />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
 
-      {/* Treatment Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 glass-card p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Treatment Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={treatmentData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="patients"
-              >
-                {treatmentData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="space-y-4">
-          <div className="glass-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-green-100">
-                <UserCheck className="text-green-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Recovery Rate</p>
-                <p className="text-xl font-bold text-gray-900">87.3%</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="glass-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-blue-100">
-                <TrendingUp className="text-blue-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Avg. Treatment Time</p>
-                <p className="text-xl font-bold text-gray-900">12.5 days</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="glass-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-purple-100">
-                <Activity className="text-purple-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Patient Satisfaction</p>
-                <p className="text-xl font-bold text-gray-900">4.8/5.0</p>
-              </div>
-            </div>
-          </div>
+        <div className="glass-card p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent sessions</h3>
+          {recent.length ? (
+            <ul className="space-y-3">
+              {recent.map((s) => (
+                <li key={s.id} className="text-sm">
+                  <p className="font-medium text-gray-900 truncate">{s.title}</p>
+                  <p className="text-gray-500 truncate">
+                    {patientName.get(s.patientId) ?? "Unknown patient"} ·{" "}
+                    {new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {s.note ? " · note" : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-500">No sessions yet.</p>
+          )}
         </div>
       </div>
     </div>
