@@ -212,19 +212,28 @@ async function callAnthropic(s: AiSettings, system: string, user: string, maxTok
 
 async function callOpenAI(s: AiSettings, system: string, user: string, json: boolean, maxTokens: number): Promise<string> {
   const info = providerInfo('openai');
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.apiKey.trim()}` },
-    body: JSON.stringify({
-      model: s.model,
-      max_completion_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      ...(json ? { response_format: { type: 'json_object' } } : {}),
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.apiKey.trim()}` },
+      body: JSON.stringify({
+        model: s.model,
+        max_completion_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        ...(json ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    });
+  } catch {
+    // OpenAI's error responses (e.g. 401 for a bad key) carry no CORS headers, so the
+    // browser reports them as a network failure instead of letting us read the status.
+    throw new AiError(
+      'Could not read a response from OpenAI. This usually means the key was rejected (OpenAI hides the error from browsers) or the network blocked the request. Check the key in AI settings.',
+    );
+  }
   if (!res.ok) throw new AiError(describeHttpError(info, res.status, await readErrorDetail(res)));
   const data = await res.json();
   return (data?.choices?.[0]?.message?.content ?? '').trim();
@@ -232,18 +241,23 @@ async function callOpenAI(s: AiSettings, system: string, user: string, json: boo
 
 async function callGemini(s: AiSettings, system: string, user: string, json: boolean, maxTokens: number): Promise<string> {
   const info = providerInfo('gemini');
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey.trim() },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
-      }),
-    },
-  );
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey.trim() },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
+        }),
+      },
+    );
+  } catch {
+    throw new AiError(`Could not reach ${info.label}. Check your connection and key.`);
+  }
   if (!res.ok) throw new AiError(describeHttpError(info, res.status, await readErrorDetail(res)));
   const data = await res.json();
   const parts: { text?: string }[] = data?.candidates?.[0]?.content?.parts ?? [];

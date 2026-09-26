@@ -1,18 +1,47 @@
 # DocLess
 
-**A clinical documentation assistant that turns nurse-patient conversations into structured records, using a local LLM.** Built at HackRice 2025 (September 2025).
+**A clinical documentation assistant that turns nurse-patient conversations into structured visit notes.** Built at HackRice 2025 (September 2025).
 
-Nurses record a conversation with a patient, DocLess transcribes it in the browser, and a FastAPI backend running Qwen3 8B on Ollama extracts vitals, symptoms, history, concerns and observations into JSON for a doctor to review. The model runs locally, so conversation text never leaves the machine for analysis.
+**Live demo: https://docless-app.vercel.app**
+
+A nurse opens a patient, records the visit (the browser transcribes it live) or pastes a transcript, and DocLess extracts vitals, symptoms, history, patient concerns and observations into a structured note for a doctor to review. Saved notes feed the patient's latest vitals and an "ask about this patient" assistant.
+
+DocLess is **local-first**: every clinician's profile, patients and notes live in their own browser (IndexedDB). There is no DocLess server or database, so one clinician can never read another's patients. The AI step uses the visitor's **own key** (Anthropic, OpenAI or Gemini) or a **local Ollama model**, called straight from the browser.
+
+> Hackathon project, not a certified medical device and not HIPAA compliant. Use fictional data. A fictional sample patient and transcript are built in.
 
 ---
 
 ## What it does
 
-- **Sign-in and profiles.** Auth0 login for clinicians, with a profile synced to MongoDB on first sign-in.
-- **Patient management.** Add, edit and delete patients with demographics, date of birth (age calculated automatically), contact details, medical history and emergency contacts.
-- **Session recording.** Record a conversation from a patient's page and get a live transcript through the browser's Web Speech API.
-- **Structured summaries.** `POST /summarize-conversation` sends a transcript to Qwen3 8B and returns vitals, symptoms, medical history, patient concerns, nurse observations and a short summary. The prompt limits the model to facts stated in the conversation, with no medical advice.
-- **Streaming analysis.** `POST /summarize-conversation-stream` streams the model's progress and the final JSON over Server-Sent Events.
+- **Local workspace.** Enter your name and role once; no account or login. Data stays in this browser until you delete it.
+- **Patients.** Add, edit, search and delete patients (demographics, contact, insurance, chronic conditions, medications, allergies, emergency contact). Age is calculated from date of birth.
+- **Visit sessions.** Record a conversation with the Web Speech API (Chrome, Edge, Safari), or type/paste the transcript. Use the built-in sample conversation to try it without a microphone.
+- **Structured notes.** One click sends the transcript to your chosen model with an extraction prompt that records only facts stated in the conversation (no advice, no diagnosis) and returns JSON: vitals, symptoms, medical history mentioned, patient concerns, clinician observations, other characteristics and a short summary.
+- **Patient overview.** Latest vitals come from the newest note that recorded them; sessions list every note and transcript.
+- **Ask about this patient.** Questions are answered only from that patient's record and saved notes.
+- **Dashboard.** Real counts (patients, sessions, notes, sessions this week) and a 14-day activity chart.
+- **Data control.** Export everything as JSON, import it on another browser, or delete all local data.
+
+## Bring your own key
+
+Open **Settings** (or "Set up AI" inside a session) and pick a provider:
+
+| Provider | Default model | Key |
+|---|---|---|
+| Anthropic (Claude) | `claude-opus-5` | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| OpenAI | `gpt-4.1-mini` | [platform.openai.com](https://platform.openai.com/api-keys) |
+| Google Gemini | `gemini-2.5-flash` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| Ollama (local) | `qwen3:8b` | none |
+
+The model name is editable. The key is kept in the tab's `sessionStorage` (cleared when the tab closes) and is sent only with your own requests, directly to the provider. The transcript or patient record you are working on goes to that provider; nothing goes anywhere else.
+
+**Local model (the original HackRice setup).** Choose "Ollama" to run extraction on your own machine, as the hackathon build did with Qwen3 8B:
+
+```bash
+ollama pull qwen3:8b
+OLLAMA_ORIGINS=https://docless-app.vercel.app ollama serve   # not needed when running the app on localhost
+```
 
 ---
 
@@ -20,109 +49,41 @@ Nurses record a conversation with a patient, DocLess transcribes it in the brows
 
 ```mermaid
 flowchart LR
-  subgraph FE["frontend/ (React + Vite, :3000)"]
-    UI["Dashboard, Patients,<br/>Patient detail, Session recording"]
+  subgraph Browser["Your browser"]
+    UI["React app<br/>Dashboard, Patients,<br/>Patient detail, Session recording"]
     STT["Web Speech API<br/>live transcript"]
+    IDB[("IndexedDB<br/>profile, patients,<br/>sessions + notes")]
+    KEY["sessionStorage<br/>your AI key"]
   end
-  A0["Auth0"]
-  subgraph BE["backend/ (FastAPI, :8000)"]
-    API["REST: /auth, /patients,<br/>/sessions, /summarize-conversation"]
-    LLM["ConversationSummarizer<br/>llm/service.py"]
-  end
-  OL["Ollama<br/>qwen3:8b"]
-  DB[("MongoDB<br/>users, patients,<br/>sessions, conversations")]
+  LLM["Your AI provider<br/>Anthropic / OpenAI / Gemini<br/>or local Ollama"]
 
-  UI --> A0
   UI --> STT
-  UI -- "fetch + X-User-Email" --> API
-  API --> DB
-  API --> LLM --> OL
+  UI <--> IDB
+  UI -- "transcript + your key" --> LLM
+  KEY -.-> UI
 ```
 
----
+The whole app is static files on Vercel. Key files:
+
+- `frontend/src/services/db.ts`: IndexedDB storage, export/import/wipe
+- `frontend/src/services/ai.ts`: provider calls, extraction prompt, JSON parsing
+- `frontend/src/components/SessionRecording.tsx`: record or paste, generate, save
+- `frontend/src/components/PatientDashboard.tsx`: overview, sessions, ask-about-patient
 
 ## Tech stack
 
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS 4, Auth0 React SDK, Recharts, lucide-react
-- **Backend:** Python, FastAPI, Uvicorn, Pydantic, Motor and PyMongo
-- **AI:** Ollama running Qwen3 8B (`qwen3:8b`)
-- **Database:** MongoDB
-
----
+React 19, TypeScript, Vite, Tailwind CSS 4, Recharts, lucide-react, IndexedDB, Web Speech API, Anthropic TypeScript SDK (browser), OpenAI / Gemini REST, Ollama.
 
 ## Run it locally
 
-### Prerequisites
-
-- Node.js and npm
-- Python 3 and pip
-- [Ollama](https://ollama.com) with the model pulled: `ollama pull qwen3:8b`
-- MongoDB running locally (or a MongoDB Atlas URL)
-- An Auth0 single-page application (free plan works)
-
-### 1. Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-Create `backend/.env`:
-
-```env
-MONGODB_URL=mongodb://localhost:27017
-MONGODB_DATABASE=docless_db
-```
-
-Then:
-
-```bash
-ollama serve                 # in its own terminal
-python setup_database.py     # creates collections and indexes
-python server.py             # http://localhost:8000, docs at /docs
-```
-
-### 2. Frontend
-
-In the Auth0 dashboard, create a **Single Page Application** and add `http://localhost:3000` to Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins.
-
 ```bash
 cd frontend
-cp .env.example .env.local   # set VITE_AUTH0_DOMAIN and VITE_AUTH0_CLIENT_ID
 npm install
-npm run dev                  # http://localhost:3000
+npm run dev        # http://localhost:3000
 ```
 
-The frontend calls the backend at `http://localhost:8000` (`frontend/src/services/api.ts`).
+No environment variables are needed.
 
-### Try the model without the UI
+## History
 
-```bash
-curl http://localhost:8000/test-conversation          # summarize a built-in sample
-curl -N http://localhost:8000/test-conversation-stream   # same, streamed
-python backend/llm/demo_streaming.py                    # streaming demo client
-```
-
-More detail on the MongoDB schema and endpoints is in [`backend/README_MONGODB.md`](backend/README_MONGODB.md).
-
----
-
-## API overview
-
-| Area | Endpoints |
-|---|---|
-| Health | `GET /health` (Ollama connection and model) |
-| Users | `POST /auth/register`, `GET /auth/profile`, `PUT /auth/profile` |
-| Patients | `POST /patients`, `GET /patients`, `GET/PUT/DELETE /patients/{id}`, `GET /patients/{id}/conversations` |
-| Sessions | `POST/GET /patients/{id}/sessions`, `GET/PUT /sessions/{id}` |
-| Summaries | `POST /summarize-conversation`, `POST /summarize-conversation-stream`, `GET /test-conversation`, `GET /test-conversation-stream` |
-
----
-
-## Status
-
-Hackathon prototype from HackRice 2025. Known gaps:
-
-- Recorded sessions are kept in page state; the recorder is not yet wired to the session and summary endpoints.
-- The backend identifies users by an `X-User-Email` header rather than verifying the Auth0 token, and CORS allows all origins. Both need hardening before any real patient data.
-- A Google Cloud Speech-to-Text client exists in `frontend/src/services/speechToText.ts` but is not enabled; the browser's speech recognition is used instead.
+The hackathon version had a FastAPI + MongoDB backend with Ollama summarization and Auth0 login. Its API identified users by a client-supplied `X-User-Email` header without verifying any token, so anyone could read any clinician's patients by setting that header. For the hosted version the backend was removed and storage moved into each browser; the extraction prompt and note schema carry over from `backend/llm/service.py`. The original backend is in the git history (before PR #3).
