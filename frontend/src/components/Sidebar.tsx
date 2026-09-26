@@ -7,21 +7,23 @@ import {
   Menu,
   X
 } from "lucide-react";
-import LogoutButton from "./LogoutButton";
 import Profile from "./Profile";
+import type { Profile as ProfileData } from "../types/patient";
 
 interface SidebarProps {
   currentPage: string;
   onPageChange: (page: string) => void;
   isOpen: boolean;
   onToggle: () => void;
+  profile: ProfileData;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
   currentPage, 
   onPageChange, 
   isOpen, 
-  onToggle 
+  onToggle,
+  profile,
 }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -70,7 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Profile */}
         <div className="p-4">
-          <Profile />
+          <Profile profile={profile} />
         </div>
 
         {/* Navigation */}
@@ -84,7 +86,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 onClick={() => {
                   onPageChange(item.id);
-                  onToggle(); // Close mobile menu
+                  if (isOpen) onToggle(); // Close mobile menu
                 }}
                 className={`
                   w-full flex items-center gap-3 px-4 py-3 rounded-lg
@@ -102,9 +104,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-white/10">
-          <LogoutButton />
+        <div className="p-4 border-t border-white/10 text-xs text-gray-500">
+          Local-first: your data stays in this browser.
         </div>
       </div>
     </>

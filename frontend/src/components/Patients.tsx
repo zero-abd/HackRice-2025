@@ -1,108 +1,48 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Search, Filter, UserPlus, MoreVertical, X, Calendar, User, Edit, Trash2, Phone, MapPin, Shield, Pill, AlertTriangle, FileText, Accessibility, UserCheck } from "lucide-react";
+import { Search, UserPlus, MoreVertical, X, Calendar, User, Edit, Trash2, Phone, MapPin, Shield, Pill, AlertTriangle, FileText, Accessibility, UserCheck, Sparkles } from "lucide-react";
 import PatientDashboard from "./PatientDashboard";
-import { useApiService, PatientCreateData, Patient as ApiPatient } from "../services/api";
+import { ageFromDob } from "../lib/format";
+import type { Patient, PatientInput } from "../types/patient";
+import * as db from "../services/db";
+import { SAMPLE_PATIENT } from "../services/sample";
 
-interface Patient {
-  id: string;
-  name: string;
-  gender: "Male" | "Female" | "Other";
-  dob: string;
-  address: string;
-  phoneNumber: string;
-  healthInsurance: string;
-  medications: string;
-  allergies: string;
-  reasonForVisit: string;
-  disabilities: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-}
+type PatientFormData = PatientInput;
 
-interface PatientFormData {
-  name: string;
-  gender: "Male" | "Female" | "Other";
-  dob: string;
-  address: string;
-  phoneNumber: string;
-  healthInsurance: string;
-  medications: string;
-  allergies: string;
-  reasonForVisit: string;
-  disabilities: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-}
+const EMPTY_FORM: PatientFormData = {
+  name: "",
+  gender: "Male",
+  dob: "",
+  address: "",
+  phoneNumber: "",
+  healthInsurance: "",
+  chronicConditions: "",
+  medications: "",
+  allergies: "",
+  disabilities: "",
+  emergencyContact: "",
+  emergencyPhone: ""
+};
 
 const Patients: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  const apiService = useApiService();
   const [patients, setPatients] = useState<Patient[]>([]);
-
-  // Helper function to safely convert gender string to union type
-  const convertGender = (gender: string): "Male" | "Female" | "Other" => {
-    return (gender === "Male" || gender === "Female" || gender === "Other") 
-      ? gender 
-      : "Other";
-  };
-
+  const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const [formData, setFormData] = useState<PatientFormData>({
-    name: "",
-    gender: "Male",
-    dob: "",
-    address: "",
-    phoneNumber: "",
-    healthInsurance: "",
-    medications: "",
-    allergies: "",
-    reasonForVisit: "",
-    disabilities: "",
-    emergencyContact: "",
-    emergencyPhone: ""
-  });
+  const [formData, setFormData] = useState<PatientFormData>(EMPTY_FORM);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load patients from API on component mount
-  useEffect(() => {
-    const loadPatients = async () => {
-      try {
-        const response = await apiService.getPatients();
-        if (response.success && response.data) {
-          // Convert API patients to local format
-          const convertedPatients: Patient[] = response.data.map((apiPatient: ApiPatient) => ({
-            id: apiPatient.id,
-            name: `${apiPatient.first_name} ${apiPatient.last_name}`,
-            gender: convertGender(apiPatient.gender),
-            dob: apiPatient.date_of_birth.split('T')[0], // Convert to YYYY-MM-DD format
-            address: apiPatient.address || "",
-            phoneNumber: apiPatient.phone_number || "",
-            healthInsurance: apiPatient.insurance_info?.provider || "",
-            medications: Array.isArray(apiPatient.current_medications) 
-              ? apiPatient.current_medications.join(", ") 
-              : apiPatient.current_medications || "",
-            allergies: Array.isArray(apiPatient.allergies) 
-              ? apiPatient.allergies.join(", ") 
-              : apiPatient.allergies || "",
-            reasonForVisit: apiPatient.notes || "",
-            disabilities: "", // Not in API model, default to empty
-            emergencyContact: apiPatient.emergency_contact_name || "",
-            emergencyPhone: apiPatient.emergency_contact_phone || ""
-          }));
-          setPatients(convertedPatients);
-        }
-      } catch (error) {
-        console.error('Failed to load patients:', error);
-        // Keep empty array as fallback
-      }
-    };
+  const loadPatients = useCallback(async () => {
+    setPatients(await db.listPatients());
+    setLoaded(true);
+  }, []);
 
-    if (apiService.isAuthenticated) {
-      loadPatients();
-    }
-  }, [apiService.isAuthenticated]); // Only depend on authentication status
+  useEffect(() => {
+    loadPatients();
+  }, [loadPatients]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -111,145 +51,32 @@ const Patients: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setSaveError(null);
+    const data: PatientFormData = { ...formData, name: formData.name.trim() };
     try {
       if (editingPatient) {
-        // Update existing patient
-        const nameParts = formData.name.trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'N/A';
-        
-        const updateData: Partial<PatientCreateData> = {
-          first_name: firstName,
-          last_name: lastName,
-          date_of_birth: formData.dob + 'T00:00:00.000Z', // Convert to ISO datetime format
-          gender: formData.gender,
-          phone_number: formData.phoneNumber || undefined,
-          address: formData.address || undefined,
-          emergency_contact_name: formData.emergencyContact || undefined,
-          emergency_contact_phone: formData.emergencyPhone || undefined,
-          current_medications: formData.medications ? formData.medications.split(',').map(m => m.trim()).filter(m => m) : [],
-          allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()).filter(a => a) : [],
-          insurance_info: formData.healthInsurance ? { provider: formData.healthInsurance } : {},
-          notes: formData.reasonForVisit || undefined
-        };
-
-        const response = await apiService.updatePatient(editingPatient.id, updateData);
-        
-        if (response.success && response.data) {
-          const updatedPatient: Patient = {
-            id: response.data.id,
-            name: `${response.data.first_name} ${response.data.last_name}`,
-            gender: convertGender(response.data.gender),
-            dob: response.data.date_of_birth.split('T')[0],
-            address: response.data.address || "",
-            phoneNumber: response.data.phone_number || "",
-            healthInsurance: response.data.insurance_info?.provider || "",
-            medications: Array.isArray(response.data.current_medications) 
-              ? response.data.current_medications.join(", ") 
-              : response.data.current_medications || "",
-            allergies: Array.isArray(response.data.allergies) 
-              ? response.data.allergies.join(", ") 
-              : response.data.allergies || "",
-            reasonForVisit: response.data.notes || "",
-            disabilities: "",
-            emergencyContact: response.data.emergency_contact_name || "",
-            emergencyPhone: response.data.emergency_contact_phone || ""
-          };
-
-          setPatients(prev => prev.map(patient => 
-            patient.id === editingPatient.id ? updatedPatient : patient
-          ));
-        }
+        await db.updatePatient(editingPatient.id, data);
       } else {
-        // Create new patient
-        const nameParts = formData.name.trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'N/A';
-        
-        const patientData: PatientCreateData = {
-          first_name: firstName,
-          last_name: lastName,
-          date_of_birth: formData.dob + 'T00:00:00.000Z', // Convert to ISO datetime format
-          gender: formData.gender,
-          phone_number: formData.phoneNumber || undefined,
-          address: formData.address || undefined,
-          emergency_contact_name: formData.emergencyContact || undefined,
-          emergency_contact_phone: formData.emergencyPhone || undefined,
-          current_medications: formData.medications ? formData.medications.split(',').map(m => m.trim()).filter(m => m) : [],
-          allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()).filter(a => a) : [],
-          insurance_info: formData.healthInsurance ? { provider: formData.healthInsurance } : {},
-          notes: formData.reasonForVisit || undefined
-        };
-
-        const response = await apiService.createPatient(patientData);
-        
-        if (response.success && response.data) {
-          const newPatient: Patient = {
-            id: response.data.id,
-            name: `${response.data.first_name} ${response.data.last_name}`,
-            gender: convertGender(response.data.gender),
-            dob: response.data.date_of_birth.split('T')[0],
-            address: response.data.address || "",
-            phoneNumber: response.data.phone_number || "",
-            healthInsurance: response.data.insurance_info?.provider || "",
-            medications: Array.isArray(response.data.current_medications) 
-              ? response.data.current_medications.join(", ") 
-              : response.data.current_medications || "",
-            allergies: Array.isArray(response.data.allergies) 
-              ? response.data.allergies.join(", ") 
-              : response.data.allergies || "",
-            reasonForVisit: response.data.notes || "",
-            disabilities: "",
-            emergencyContact: response.data.emergency_contact_name || "",
-            emergencyPhone: response.data.emergency_contact_phone || ""
-          };
-
-          setPatients(prev => [...prev, newPatient]);
-        }
+        await db.createPatient(data);
       }
-
-      // Reset form and close modal
-      setFormData({
-        name: "",
-        gender: "Male",
-        dob: "",
-        address: "",
-        phoneNumber: "",
-        healthInsurance: "",
-        medications: "",
-        allergies: "",
-        reasonForVisit: "",
-        disabilities: "",
-        emergencyContact: "",
-        emergencyPhone: ""
-      });
-      setEditingPatient(null);
-      setIsModalOpen(false);
-      
+      await loadPatients();
+      handleCloseModal();
     } catch (error) {
-      console.error('Failed to save patient:', error);
-      alert('Failed to save patient. Please try again.');
+      setSaveError(error instanceof Error ? error.message : "Failed to save patient.");
     }
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingPatient(null);
-    setFormData({
-      name: "",
-      gender: "Male",
-      dob: "",
-      address: "",
-      phoneNumber: "",
-      healthInsurance: "",
-      medications: "",
-      allergies: "",
-      reasonForVisit: "",
-      disabilities: "",
-      emergencyContact: "",
-      emergencyPhone: ""
-    });
+    setSaveError(null);
+    setFormData(EMPTY_FORM);
+  };
+
+  const addSamplePatient = async () => {
+    const p = await db.createPatient(SAMPLE_PATIENT);
+    await loadPatients();
+    setSelectedPatientId(p.id);
   };
 
   const toggleDropdown = (patientId: string) => {
@@ -267,21 +94,24 @@ const Patients: React.FC = () => {
         address: patientToEdit.address,
         phoneNumber: patientToEdit.phoneNumber,
         healthInsurance: patientToEdit.healthInsurance,
+        chronicConditions: patientToEdit.chronicConditions,
         medications: patientToEdit.medications,
         allergies: patientToEdit.allergies,
-        reasonForVisit: patientToEdit.reasonForVisit,
         disabilities: patientToEdit.disabilities,
         emergencyContact: patientToEdit.emergencyContact,
-        emergencyPhone: patientToEdit.emergencyPhone
+        emergencyPhone: patientToEdit.emergencyPhone,
       });
       setIsModalOpen(true);
     }
     setOpenDropdownId(null);
   };
 
-  const handleDeletePatient = (patientId: string) => {
-    setPatients(prev => prev.filter(patient => patient.id !== patientId));
+  const handleDeletePatient = async (patientId: string) => {
     setOpenDropdownId(null);
+    const p = patients.find(x => x.id === patientId);
+    if (!window.confirm(`Delete ${p?.name ?? "this patient"} and all of their sessions? This cannot be undone.`)) return;
+    await db.deletePatient(patientId);
+    await loadPatients();
   };
 
   // Close dropdown when clicking outside
@@ -318,7 +148,14 @@ const Patients: React.FC = () => {
 
   const handleBackToPatients = () => {
     setSelectedPatientId(null);
+    loadPatients();
   };
+
+  const q = search.trim().toLowerCase();
+  const visiblePatients = q
+    ? patients.filter(p =>
+        [p.name, p.phoneNumber, p.healthInsurance, p.chronicConditions].some(v => v.toLowerCase().includes(q)))
+    : patients;
 
   // If a patient is selected, show the patient dashboard
   if (selectedPatientId) {
@@ -336,15 +173,24 @@ const Patients: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Patients</h1>
-          <p className="text-gray-600">Manage and monitor patient information</p>
+          <p className="text-gray-600">Stored only in this browser. {patients.length} patient{patients.length === 1 ? "" : "s"}.</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          <UserPlus size={20} />
-          Add Patient
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={addSamplePatient}
+            className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg transition-colors"
+          >
+            <Sparkles size={18} />
+            Add sample patient
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <UserPlus size={20} />
+            Add Patient
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -353,15 +199,13 @@ const Patients: React.FC = () => {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
             <input
-              type="text"
-              placeholder="Search patients..."
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, phone, insurance or condition..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            <Filter size={20} />
-            Filter
-          </button>
         </div>
       </div>
 
@@ -384,7 +228,7 @@ const Patients: React.FC = () => {
                   Insurance
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Reason for Visit
+                  Chronic Conditions
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -392,7 +236,7 @@ const Patients: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {patients.map((patient) => (
+              {visiblePatients.map((patient) => (
                 <tr key={patient.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
                   <td 
                     className="px-6 py-4 whitespace-nowrap"
@@ -400,11 +244,11 @@ const Patients: React.FC = () => {
                   >
                     <div className="flex items-center">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-                        {patient.name.split(' ').map(n => n[0]).join('')}
+                        {patient.name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase()}
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{patient.name}</div>
-                        <div className="text-sm text-gray-500">ID: {patient.id}</div>
+                        <div className="text-sm text-gray-500">{(() => { const age = ageFromDob(patient.dob); return age !== null ? `${age} years` : "Age unknown"; })()}</div>
                       </div>
                     </div>
                   </td>
@@ -430,7 +274,7 @@ const Patients: React.FC = () => {
                     className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
                     onClick={() => handlePatientClick(patient.id)}
                   >
-                    {patient.reasonForVisit}
+                    <span className="block max-w-xs truncate">{patient.chronicConditions}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
                     <div className="relative" ref={openDropdownId === patient.id ? dropdownRef : null}>
@@ -466,6 +310,18 @@ const Patients: React.FC = () => {
               ))}
             </tbody>
           </table>
+          {loaded && visiblePatients.length === 0 && (
+            <div className="p-8 text-center text-gray-600 space-y-2">
+              {patients.length === 0 ? (
+                <>
+                  <p>No patients yet.</p>
+                  <p className="text-sm text-gray-500">Add a patient, or add the fictional sample patient to try the visit-note flow.</p>
+                </>
+              ) : (
+                <p>No patients match "{search}".</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -651,18 +507,18 @@ const Patients: React.FC = () => {
 
                 {/* Chronic Diseases */}
                 <div>
-                  <label htmlFor="reasonForVisit" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="chronicConditions" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                     <FileText size={16} />
-                    Chronic Diseases
+                    Chronic Conditions
                   </label>
                   <textarea
-                    id="reasonForVisit"
-                    name="reasonForVisit"
-                    value={formData.reasonForVisit}
+                    id="chronicConditions"
+                    name="chronicConditions"
+                    value={formData.chronicConditions}
                     onChange={handleInputChange}
                     rows={3}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                    placeholder="List any chronic diseases or conditions (optional)"
+                    placeholder="List any chronic conditions (optional, separate with commas)"
                   />
                 </div>
 
@@ -696,7 +552,7 @@ const Patients: React.FC = () => {
                      onChange={handleInputChange}
                      rows={2}
                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base resize-none"
-                     placeholder="List any allergies (optional)"
+                     placeholder="List any allergies (optional, separate with commas)"
                    />
                  </div>
 
@@ -718,6 +574,7 @@ const Patients: React.FC = () => {
                  </div>
                </div>
 
+              {saveError && <p className="text-sm text-red-600" role="alert">{saveError}</p>}
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
